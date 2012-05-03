@@ -1,0 +1,15 @@
+{application, mgsv,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  crypto,
+                  kernel,
+                  stdlib,
+                  mochiweb,
+                  webmachine
+                 ]},
+  {mod, { mgsv_app, []}},
+  {env, []}
+ ]}.
