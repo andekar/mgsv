@@ -1,0 +1,10 @@
+First install rebar
+
+then
+make deps
+followed by
+make
+
+start by
+cd rel
+rebar -v generate
