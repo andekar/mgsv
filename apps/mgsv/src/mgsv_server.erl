@@ -19,12 +19,20 @@ send_message(Message) ->
 %% callbacks
 
 handle_call(["add", P1, P2, Amount], _From, State) ->
-    ToAdd = {struct, [{debt, {struct, [{user1, list_to_binary(P1)}, {user2, list_to_binary(P2)}, {amount, list_to_integer(Amount)}]}}]},
-    {reply, {ok, "ok"}, [ToAdd | State]};
+    Add = {P1, P2, Amount},
+    {reply, {ok, "ok"}, [Add | State]};
+
+handle_call(["users"], _From, State) ->
+    {reply, {ok, "ok"}, State};
 
 handle_call(["get"], _From, State) ->
-    Return = mochijson2:encode(State),
-    {reply, {ok, Return}, State};
+    Return = lists:map(fun({P1,P2,Amount}) ->
+                           {struct, [{debt, {struct,[{user1,list_to_binary(P1)},
+                                                    {user2,list_to_binary(P2)},
+                                                    {amount, list_to_integer(Amount)}
+                                                              ]}}]} end, State),
+    Return2 = mochijson2:encode(Return),
+    {reply, {ok, Return2}, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

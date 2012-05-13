@@ -1,0 +1,7 @@
+#ignore .beam
+*.beam
+rel/mgsv/*
+deps
+.#*
+rebar
+*ebin*

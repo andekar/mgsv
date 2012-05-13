@@ -23,8 +23,7 @@ to_text(ReqData, Context) ->
 
 to_html(ReqData, Context) ->
     {Body, _RD, Ctx2} = to_text(ReqData, Context),
-    HBody = io_lib:format("~s~n",
-                          [erlang:iolist_to_binary(Body)]),
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
 
 is_authorized(ReqData, Context) ->
