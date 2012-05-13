@@ -36,5 +36,6 @@ init([]) ->
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, dynamic},
     MgsvServer = ?CHILD(mgsv_server, worker),
-    Processes = [Web, MgsvServer],
+    PayServer = ?CHILD(pay_server, worker),
+    Processes = [Web, MgsvServer, PayServer],
     {ok, { {one_for_one, 10, 10}, Processes} }.

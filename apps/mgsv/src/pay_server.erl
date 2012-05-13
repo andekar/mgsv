@@ -1,0 +1,94 @@
+-module(pay_server).
+
+-behaviour(gen_server).
+
+-export([start_link/0, call_pay/1, cast_pay/1]).
+
+-export([sort_user_debt/4, add_to_earlier_debt/2, get_debts/0, get_transactions/0]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-record(state, {debts, users, debt_record}).
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+init([]) ->
+    {_,A} = dets:open_file(debts.dets,[{type, set}]),
+    {_,B} = dets:open_file(users.dets,[{type, set}]),
+    {_,C} = dets:open_file(debt_transactions.dets,[{type, duplicate_bag}]),
+    {ok, #state{debts=A, users=B, debt_record=C}}.
+
+call_pay(Message) ->
+    io:format("Module: ~p function: call_pay Argument: ~p~n", [?MODULE, Message]),
+    gen_server:call(?MODULE, Message).
+
+cast_pay(Message) ->
+    io:format("Module: ~p function: cast_pay Argument: ~p~n", [?MODULE, Message]),
+    gen_server:cast(?MODULE, Message).
+
+get_debts() ->
+    io:format("Module: ~p function: get_debts~n", [?MODULE]),
+    gen_server:call(?MODULE, get_debts).
+
+get_transactions() ->
+    io:format("Module: ~p function: get_transactions~n", [?MODULE]),
+    gen_server:call(?MODULE, get_transactions).
+
+%% callbacks
+handle_call(get_users, _From, State=#state{debts=_Debts, users=Users, debt_record=_DebtRecord}) ->
+    UserList = dets:foldl(fun(Arg, Acc) -> [Arg|Acc] end, [],Users),
+    {reply, UserList, State};
+
+handle_call(get_debts, _From, State=#state{debts=Debts, users=_Users, debt_record=_DebtRecord}) ->
+    DebtList = dets:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
+    {reply, DebtList, State};
+
+handle_call(get_transactions, _From, State=#state{debts=_Debts, users=_Users, debt_record=Transactions}) ->
+    DebtList = dets:foldl(fun({{P1,P2}, Reason, Amount}, Acc) -> [{P1,P2,Reason,Amount}|Acc] end, [], Transactions),
+    {reply, DebtList, State};
+
+handle_call(_Request, _From, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+    io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
+    {reply, ok, State}.
+
+handle_cast({add, StrP1, StrP2, StrReason, StrAmount}, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+    P1 =list_to_binary(StrP1),
+    P2 =list_to_binary(StrP2),
+    Reason =list_to_binary(StrReason),
+    Amount =list_to_integer(StrAmount),
+    %insert people in to the database at first
+    dets:insert(Users, {P1}),
+    dets:insert(Users, {P2}),
+    dets:insert(DebtRecord, sort_user_debt(P1, P2, Reason, Amount)),
+    add_to_earlier_debt(sort_user_debt(P1, P2, Reason, Amount), Debts),
+    {noreply, State};
+
+handle_cast(_Msg, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+    dets:close(Debts),
+    dets:close(Users),
+    dets:close(DebtRecord),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+sort_user_debt(P1,P2,Reason, Amount) ->
+     case P1 < P2 of
+          true -> {{P1,P2}, Reason, Amount};
+          _ -> {{P2,P1}, Reason, (-1) * Amount}
+     end.
+
+%%Fix to be safe
+add_to_earlier_debt({Key, _, Amount}, Db) ->
+      case dets:lookup(Db, Key) of
+           [] -> dets:insert(Db, {Key, Amount});
+           [{_,Amount2}] -> dets:insert(Db, {Key, Amount + Amount2})
+      end.
