@@ -47,6 +47,17 @@ handle_call(["get_user_debt", User], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
+handle_call(["get_user_transactions", User], _From, State) ->
+    Return = lists:map(fun({P1,P2,Reason, Amount}) ->
+                           {struct, [{debt, {struct,[{user1, P1},
+                                                    {user2, P2},
+                                                    {reason, Reason},
+                                                    {amount, Amount}
+                                                              ]}}]} end,
+                                                     pay_server:get_user_transactions(list_to_binary(User))),
+    Return2 = mochijson2:encode(Return),
+    {reply, {ok, Return2}, State};
+
 handle_call(["get_transactions"], _From, State) ->
     Return = lists:map(fun({P1,P2,Reason, Amount}) ->
                            {struct, [{debt, {struct,[{user1, P1},

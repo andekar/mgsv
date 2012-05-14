@@ -4,7 +4,7 @@
 
 -export([start_link/0, call_pay/1, cast_pay/1]).
 
--export([sort_user_debt/4, add_to_earlier_debt/2, get_debts/0, get_transactions/0, get_user_debt/1]).
+-export([sort_user_debt/4, add_to_earlier_debt/2, get_debts/0, get_transactions/0, get_user_transactions/1, get_user_debt/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -36,6 +36,10 @@ get_user_debt(User) ->
     io:format("Module: ~p function: get_user_debt~n", [?MODULE]),
     gen_server:call(?MODULE, {get_user_debt, User}).
 
+get_user_transactions(User) ->
+    io:format("Module: ~p function: get_user_transactions~n", [?MODULE]),
+    gen_server:call(?MODULE, {get_user_transactions, User}).
+
 get_transactions() ->
     io:format("Module: ~p function: get_transactions~n", [?MODULE]),
     gen_server:call(?MODULE, get_transactions).
@@ -50,6 +54,13 @@ handle_call({get_user_debt, User},  _From, State=#state{debts=Debts, users=_User
     DebtsList2 = dets:match(Debts, {{'$1', User}, '$2'}),
     DebtList = lists:map(fun([V1,V2]) -> {User, V1,V2} end, DebtsList),
     DebtList2 = lists:map(fun([V1,V2]) -> {V1, User, V2} end, DebtsList2),
+    {reply, DebtList ++ DebtList2, State};
+
+handle_call({get_user_transactions, User},  _From, State=#state{debts=_Debts, users=_Users, debt_record=DebtRecord}) ->
+    DebtsList = dets:match(DebtRecord, {{User,'$1'}, '$3', '$2'}),
+    DebtsList2 = dets:match(DebtRecord, {{'$1', User}, '$3', '$2'}),
+    DebtList = lists:map(fun([V1,V2, V3]) -> {User, V1,V2, V3} end, DebtsList),
+    DebtList2 = lists:map(fun([V1,V2, V3]) -> {V1, User, V2, V3} end, DebtsList2),
     {reply, DebtList ++ DebtList2, State};
 
 handle_call(get_debts, _From, State=#state{debts=Debts, users=_Users, debt_record=_DebtRecord}) ->
