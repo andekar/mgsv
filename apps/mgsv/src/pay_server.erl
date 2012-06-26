@@ -75,11 +75,7 @@ handle_call(_Request, _From, State=#state{debts=Debts, users=Users, debt_record=
     io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
     {reply, ok, State}.
 
-handle_cast({add, StrP1, StrP2, StrReason, StrAmount}, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
-    P1 =list_to_binary(StrP1),
-    P2 =list_to_binary(StrP2),
-    Reason =list_to_binary(StrReason),
-    Amount =list_to_integer(StrAmount),
+handle_cast({add, {struct,[{_, P1},{_,P2}, {_,Reason}, {_,Amount}]}}, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
     %insert people in to the database at first
     dets:insert(Users, {P1}),
     dets:insert(Users, {P2}),

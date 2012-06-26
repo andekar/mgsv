@@ -17,10 +17,12 @@ send_message(Message) ->
     gen_server:call(?MODULE, Message).
 
 %% callbacks
+%handle_call([], _From, State) ->
+%    {reply, {ok, "ok"}, State};
 
-handle_call(["add", P1, P2, Reason, Amount], _From, State) ->
-    Add = {P1, P2, Reason, Amount},
-    pay_server:cast_pay({add, P1, P2, Reason, Amount}),
+handle_call([{struct,[{<<"debt">>,Vars}]}|Rest], _From, State) ->
+    error_logger:info_msg("Adding debt~n~p~n",[Vars]),
+    pay_server:cast_pay({add,Vars}),
     {reply, {ok, "ok"}, State};
 
 handle_call(["users"], _From, State) ->
@@ -37,7 +39,7 @@ handle_call(["get"], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call(["get_user_debt", User], _From, State) ->
+handle_call(["user_debt", User], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
                            {struct, [{debt, {struct,[{user1, P1},
                                                     {user2, P2},
@@ -47,7 +49,7 @@ handle_call(["get_user_debt", User], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call(["get_user_transactions", User], _From, State) ->
+handle_call(["user_transactions", User], _From, State) ->
     Return = lists:map(fun({P1,P2,Reason, Amount}) ->
                            {struct, [{debt, {struct,[{user1, P1},
                                                     {user2, P2},
@@ -58,7 +60,7 @@ handle_call(["get_user_transactions", User], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call(["get_transactions"], _From, State) ->
+handle_call(["transactions"], _From, State) ->
     Return = lists:map(fun({P1,P2,Reason, Amount}) ->
                            {struct, [{debt, {struct,[{user1, P1},
                                                     {user2, P2},

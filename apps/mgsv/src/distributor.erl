@@ -1,49 +1,44 @@
 -module(distributor).
 
--export([to_html/2, to_text/2, content_types_provided/2,
-         is_authorized/2, generate_etag/2, expires/2, init/1]).
+-export([content_types_provided/2, content_types_accepted/2,
+         init/1, allowed_methods/2, from_json/2, to_html/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 
-init([]) ->
+init(Config) ->
     {ok, []}.
+
+allowed_methods(ReqData, Context) ->
+    {['GET', 'HEAD', 'PUT'], ReqData, Context}.
 
 %%callbacks for the dispatch
 content_types_provided(ReqData, Context) ->
-    {[{"text/html", to_html},{"text/plain",to_text}], ReqData, Context}.
+    {[{"application/json", from_json}, {"text/html", to_html}], ReqData, Context}.
 
-to_text(ReqData, Context) ->
-    case wrq:path_tokens(ReqData) of
+content_types_accepted(RD, Ctx) ->
+    error_logger:info_msg("Content types~n"),
+    {[{"application/json", from_json}], RD, Ctx}.
+
+from_json(ReqData, Context) ->
+    Tmp = case wrq:req_body(ReqData) of
          Any ->
-                    {ok, Result} = mgsv_server:send_message(Any),
+                    Decoded = mochijson2:decode(Any),
+                    {ok, Result} = mgsv_server:send_message(Decoded),
                     {Result, ReqData, Context};
-         _ ->       Body = io_lib:format("OK", []),
-                    {Body, ReqData, Context}
-                    end.
+         _ ->       Body2 = io_lib:format("OK", []),
+                    {Body2, ReqData, Context}
+                    end,
+    {"OK", ReqData, Context}.
 
 to_html(ReqData, Context) ->
-    {Body, _RD, Ctx2} = to_text(ReqData, Context),
+    error_logger:info_msg("to_html~n",[]),
+    {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
+         Any ->
+                    error_logger:info_msg("Get request received~n~p~n",[Any]),
+                    {ok, Result} = mgsv_server:send_message(Any),
+                    {Result, ReqData, Context};
+         _ ->       Body2 = io_lib:format("OK", []),
+                    {Body2, ReqData, Context}
+                    end,
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
-
-is_authorized(ReqData, Context) ->
-    case wrq:disp_path(ReqData) of
-        "authdemo" ->
-            case wrq:get_req_header("authorization", ReqData) of
-                "Basic "++Base64 ->
-                    Str = base64:mime_decode_to_string(Base64),
-                    case string:tokens(Str, ":") of
-                        ["authdemo", "demo1"] ->
-                            {true, ReqData, Context};
-                        _ ->
-                            {"Basic realm=webmachine", ReqData, Context}
-                    end;
-                _ ->
-                    {"Basic realm=webmachine", ReqData, Context}
-            end;
-        _ -> {true, ReqData, Context}
-    end.
-
-expires(ReqData, Context) -> {{{2021,1,1},{0,0,0}}, ReqData, Context}.
-
-generate_etag(ReqData, Context) -> {wrq:raw_path(ReqData), ReqData, Context}.
