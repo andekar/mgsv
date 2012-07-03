@@ -22,6 +22,7 @@ content_types_accepted(RD, Ctx) ->
 from_json(ReqData, Context) ->
     Tmp = case wrq:req_body(ReqData) of
          Any ->
+                    error_logger:info_msg("JSon received ~p~n",[Any]),
                     Decoded = mochijson2:decode(Any),
                     {ok, Result} = mgsv_server:send_message(Decoded),
                     {Result, ReqData, Context};
