@@ -13,11 +13,11 @@ allowed_methods(ReqData, Context) ->
 
 %%callbacks for the dispatch
 content_types_provided(ReqData, Context) ->
-    {[{"application/json", from_json}, {"text/html", to_html}], ReqData, Context}.
+    {[{"text/html", to_html}], ReqData, Context}.
 
 content_types_accepted(RD, Ctx) ->
     error_logger:info_msg("Content types~n"),
-    {[{"application/json", from_json}], RD, Ctx}.
+    {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
 from_json(ReqData, Context) ->
     Tmp = case wrq:req_body(ReqData) of
