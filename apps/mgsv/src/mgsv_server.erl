@@ -20,9 +20,12 @@ send_message(Message) ->
 %handle_call([], _From, State) ->
 %    {reply, {ok, "ok"}, State};
 
-handle_call([{struct,[{<<"debt">>,Vars}]}|Rest], _From, State) ->
-    error_logger:info_msg("Adding debt~n~p~n",[Vars]),
-    pay_server:cast_pay({add,Vars}),
+handle_call(Struct = [{struct, [{<<"debt">>, _Vars}]}|_Debts], _From, State) ->
+    error_logger:info_msg("Adding debtjson ~n~p~n",[Struct]),
+    lists:map(fun({struct, [{<<"debt">>, Vars}]}) ->
+                               error_logger:info_msg("Adding debt~n~p~n",[Vars]),
+                               pay_server:cast_pay({add,Vars})
+                               end, Struct),
     {reply, {ok, "ok"}, State};
 
 handle_call(["users"], _From, State) ->
