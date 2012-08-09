@@ -75,7 +75,12 @@ handle_call(_Request, _From, State=#state{debts=Debts, users=Users, debt_record=
     io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
     {reply, ok, State}.
 
-handle_cast({add, {struct,[{_, P1},{_,P2}, {_,Reason}, {_,Amount}]}}, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+handle_cast({add, {struct, Struct}}, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+    %{struct,[{_, P1},{_,P2}, {_,Reason}, {_,Amount}]}
+    P1 = proplists:get_value(<<"user1">>, Struct),
+    P2 = proplists:get_value(<<"user2">>, Struct),
+    Reason = proplists:get_value(<<"reason">>, Struct),
+    Amount = proplists:get_value(<<"amount">>, Struct),
     %insert people in to the database at first
     dets:insert(Users, {P1}),
     dets:insert(Users, {P2}),
