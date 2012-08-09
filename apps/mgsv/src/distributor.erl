@@ -29,7 +29,8 @@ from_json(ReqData, Context) ->
          _ ->       Body2 = io_lib:format("OK", []),
                     {Body2, ReqData, Context}
                     end,
-    {"OK", ReqData, Context}.
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(io_lib:format("OK", []))]),
+    {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body("OK", ReqData)), Context}.
 
 to_html(ReqData, Context) ->
     error_logger:info_msg("to_html~n",[]),
