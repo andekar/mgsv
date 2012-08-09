@@ -29,7 +29,7 @@ handle_call(["users"], _From, State) ->
     Return = lists:map(fun({User}) -> {struct,[{user,User}]} end, pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
-handle_call(["get"], _From, State) ->
+handle_call(["debts"], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
                            {struct, [{debt, {struct,[{user1, P1},
                                                     {user2, P2},
