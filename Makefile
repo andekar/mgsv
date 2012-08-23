@@ -21,5 +21,11 @@ release:
 	cd rel
 	@rebar -v generate
 
+rel:
+	@rebar clean
+	@rebar compile
+	cd rel
+	@rebar -v generate
+
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'

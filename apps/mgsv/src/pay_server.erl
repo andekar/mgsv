@@ -59,7 +59,7 @@ handle_call({get_user_debt, User},  _From, State=#state{debts=Debts, users=_User
 handle_call({get_user_transactions, User},  _From, State=#state{debts=_Debts, users=_Users, debt_record=DebtRecord}) ->
     DebtsList = dets:match(DebtRecord, {{User,'$1'}, '$3', '$2'}),
     DebtsList2 = dets:match(DebtRecord, {{'$1', User}, '$3', '$2'}),
-    DebtList = lists:map(fun([V1,V2, V3]) -> {User, V1,V2, V3} end, DebtsList),
+    DebtList = lists:map(fun([V1,V2, V3]) -> {User, V1, V2, V3} end, DebtsList),
     DebtList2 = lists:map(fun([V1,V2, V3]) -> {V1, User, V2, V3} end, DebtsList2),
     {reply, DebtList ++ DebtList2, State};
 
