@@ -15,9 +15,9 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {_,A} = dets:open_file(debts.dets,[{type, set}]),
-    {_,B} = dets:open_file(users.dets,[{type, set}]),
-    {_,C} = dets:open_file(debt_transactions.dets,[{type, duplicate_bag}]),
+    {_,A} = dets:open_file("../../debts.dets",[{type, set}]),
+    {_,B} = dets:open_file("../../users.dets",[{type, set}]),
+    {_,C} = dets:open_file("../../debt_transactions.dets",[{type, duplicate_bag}]),
     {ok, #state{debts=A, users=B, debt_record=C}}.
 
 call_pay(Message) ->
@@ -71,7 +71,7 @@ handle_call(get_transactions, _From, State=#state{debts=_Debts, users=_Users, de
     DebtList = dets:foldl(fun({{P1,P2}, Reason, Amount}, Acc) -> [{P1,P2,Reason,Amount}|Acc] end, [], Transactions),
     {reply, DebtList, State};
 
-handle_call(_Request, _From, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}) ->
+handle_call(_Request, _From, State=#state{debts=_Debts, users=_Users, debt_record=_DebtRecord}) ->
     io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
     {reply, ok, State}.
 
