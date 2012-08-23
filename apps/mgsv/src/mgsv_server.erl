@@ -53,7 +53,7 @@ handle_call(["user_debt", User], _From, State) ->
     {reply, {ok, Return2}, State};
 
 handle_call(["user_transactions", User], _From, State) ->
-    Return = lists:map(fun({P1,P2,Reason, Amount}) ->
+    Return = lists:map(fun({P1,P2,Amount,Reason}) ->
                            {struct, [{debt, {struct,[{user1, P1},
                                                     {user2, P2},
                                                     {reason, Reason},
