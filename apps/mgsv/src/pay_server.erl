@@ -50,25 +50,25 @@ handle_call(get_users, _From, State=#state{debts=_Debts, users=Users, debt_recor
     {reply, UserList, State};
 
 handle_call({get_user_debt, User},  _From, State=#state{debts=Debts, users=_Users, debt_record=_DebtRecord}) ->
-    DebtsList = dets:match(Debts, {{string:to_lower(User),'_'}, {'_', '$1'}, '$2'}),
-    DebtsList2 = dets:match(Debts, {{'_', string:to_lower(User)}, {'$1', '_'}, '$2'}),
+    DebtsList = dets:match(Debts, {{User, '$1'}, '$2'}),
+    DebtsList2 = dets:match(Debts, {{'$1', User}, '$2'}),
     DebtList = lists:map(fun([V1,V2]) -> {User,V1,V2} end, DebtsList),
     DebtList2 = lists:map(fun([V1,V2]) -> {V1, User, V2} end, DebtsList2),
     {reply, DebtList ++ DebtList2, State};
 
 handle_call({get_user_transactions, User},  _From, State=#state{debts=_Debts, users=_Users, debt_record=DebtRecord}) ->
-    DebtsList = dets:match(DebtRecord, {{string:to_lower(User),'$1'}, {'_', '$1'}, '$3', '$2'}),
-    DebtsList2 = dets:match(DebtRecord, {{'_', string:to_lower(User)}, {'$1', '_'}, '$3', '$2'}),
+    DebtsList = dets:match(DebtRecord, {{User, '$1'}, '$3', '$2'}),
+    DebtsList2 = dets:match(DebtRecord, {{'$1', User}, '$3', '$2'}),
     DebtList = lists:map(fun([V1,V2, V3]) -> {User, V1, V2, V3} end, DebtsList),
     DebtList2 = lists:map(fun([V1,V2, V3]) -> {V1, User, V2, V3} end, DebtsList2),
     {reply, DebtList ++ DebtList2, State};
 
 handle_call(get_debts, _From, State=#state{debts=Debts, users=_Users, debt_record=_DebtRecord}) ->
-    DebtList = dets:foldl(fun({_, {P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
+    DebtList = dets:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
     {reply, DebtList, State};
 
 handle_call(get_transactions, _From, State=#state{debts=_Debts, users=_Users, debt_record=Transactions}) ->
-    DebtList = dets:foldl(fun({_, {P1,P2}, Reason, Amount}, Acc) -> [{P1,P2,Reason,Amount}|Acc] end, [], Transactions),
+    DebtList = dets:foldl(fun({{P1,P2}, Reason, Amount}, Acc) -> [{P1,P2,Reason,Amount}|Acc] end, [], Transactions),
     {reply, DebtList, State};
 
 handle_call(_Request, _From, State=#state{debts=_Debts, users=_Users, debt_record=_DebtRecord}) ->
@@ -104,11 +104,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 sort_user_debt(P1,P2,Reason, Amount) ->
-     P11 = string:to_lower(P1),
-     P22 = string:to_lower(P2),
      case P1 < P2 of
-          true -> {{P11,P22}, {P1,P2}, Reason, Amount};
-          _ -> {{P11,P22}, {P2,P1}, Reason, (-1) * Amount}
+          true -> {{P1,P2}, Reason, Amount};
+          _ -> {{P2,P1}, Reason, (-1) * Amount}
      end.
 
 %%Fix to be safe
