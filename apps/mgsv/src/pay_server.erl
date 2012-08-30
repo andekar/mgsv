@@ -110,8 +110,8 @@ sort_user_debt(P1,P2,Reason, Amount) ->
      end.
 
 %%Fix to be safe
-add_to_earlier_debt({Key, Users, _, Amount}, Db) ->
+add_to_earlier_debt({Key, _,Amount}, Db) ->
       case dets:lookup(Db, Key) of
-           [] -> dets:insert(Db, {Key, Users, Amount});
-           [{_,Amount2}] -> dets:insert(Db, {Key, Users, Amount + Amount2})
+           [] -> dets:insert(Db, {Key, Amount});
+           [{_,Amount2}] -> dets:insert(Db, {Key, Amount + Amount2})
       end.
