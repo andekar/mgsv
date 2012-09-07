@@ -100,7 +100,8 @@ terminate(_Reason, State=#state{debts=Debts, users=Users, debt_record=DebtRecord
     dets:close(DebtRecord),
     ok.
 
-code_change(_OldVsn, State, _Extra) ->
+code_change(OldVsn, State, _Extra) ->
+    error_logger:info_msg("UPGRADING VERSION ~n~p~n~p~n",[OldVsn, State]),
     {ok, State}.
 
 sort_user_debt(P1,P2,Reason, Amount) ->
