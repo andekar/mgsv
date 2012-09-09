@@ -34,7 +34,7 @@ init([]) ->
                  {dispatch, Dispatch}],
     Web = {webmachine_mochiweb,
            {webmachine_mochiweb, start, [WebConfig]},
-           permanent, 5000, worker, dynamic},
+           transient, 5000, worker, [mochiweb_socket_server]},
     MgsvServer = ?CHILD(mgsv_server, worker),
     PayServer = ?CHILD(pay_server, worker),
     Processes = [Web, MgsvServer, PayServer],

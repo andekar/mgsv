@@ -5,7 +5,7 @@
 
 -include_lib("webmachine/include/webmachine.hrl").
 
-init(Config) ->
+init(_Config) ->
     {ok, []}.
 
 allowed_methods(ReqData, Context) ->
@@ -20,7 +20,7 @@ content_types_accepted(RD, Ctx) ->
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
 from_json(ReqData, Context) ->
-    Tmp = case wrq:req_body(ReqData) of
+    _Tmp = case wrq:req_body(ReqData) of
          Any ->
                     error_logger:info_msg("JSon received ~p~n",[Any]),
                     Decoded = mochijson2:decode(Any),
