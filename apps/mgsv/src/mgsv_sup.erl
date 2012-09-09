@@ -9,7 +9,7 @@
 -export([init/1]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type), {I, {I, start_link, []}, transient, 5000, Type, [I]}).
 
 %% ===================================================================
 %% API functions
@@ -34,7 +34,7 @@ init([]) ->
                  {dispatch, Dispatch}],
     Web = {webmachine_mochiweb,
            {webmachine_mochiweb, start, [WebConfig]},
-           transient, 5000, worker, [mochiweb_socket_server]},
+           transient, 5000, worker, dynamic},
     MgsvServer = ?CHILD(mgsv_server, worker),
     PayServer = ?CHILD(pay_server, worker),
     Processes = [Web, MgsvServer, PayServer],
