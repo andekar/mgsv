@@ -20,17 +20,14 @@ content_types_accepted(RD, Ctx) ->
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
 from_json(ReqData, Context) ->
-    _Tmp = case wrq:req_body(ReqData) of
-         Any ->
-                    error_logger:info_msg("JSon received ~p~n",[Any]),
-                    Decoded = mochijson2:decode(Any),
-                    {ok, Result} = mgsv_server:send_message(Decoded),
-                    {Result, ReqData, Context};
-         _ ->       Body2 = io_lib:format("OK", []),
-                    {Body2, ReqData, Context}
-                    end,
-    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(io_lib:format("OK", []))]),
-    {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body("OK", ReqData)), Context}.
+    Any = wrq:req_body(ReqData),
+
+    error_logger:info_msg("JSon received ~p~n",[Any]),
+    Decoded = mochijson2:decode(Any),
+    {ok, Result} = mgsv_server:send_message(Decoded),
+
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Result)]),
+    {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body(Result, ReqData)), Context}.
 
 to_html(ReqData, Context) ->
     error_logger:info_msg("to_html~n",[]),

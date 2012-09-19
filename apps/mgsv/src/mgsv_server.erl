@@ -22,14 +22,17 @@ send_message(Message) ->
 
 handle_call(Struct = [{struct, [{<<"debt">>, _Vars}]}|_Debts], _From, State) ->
     error_logger:info_msg("Adding debtjson ~n~p~n",[Struct]),
-    lists:map(fun({struct, [{<<"debt">>, Vars}]}) ->
+    Reply = lists:map(fun({struct, [{<<"debt">>, Vars}]}) ->
                                error_logger:info_msg("Adding debt~n~p~n",[Vars]),
-                               pay_server:cast_pay({add,Vars})
+                               Tmp = pay_server:add_debt({add,Vars}),
+                               {struct, [{<<"debt">>,Tmp}]}
                                end, Struct),
-    {reply, {ok, "ok"}, State};
+    {reply, {ok, mochijson2:encode(Reply)}, State};
 
 handle_call(["users"], _From, State) ->
-    Return = lists:map(fun({User}) -> {struct,[{user,User}]} end, pay_server:call_pay(get_users)),
+    Return = lists:map(fun({Uuid, User}) ->
+                       {struct,[{uid, Uuid}, {user,User}]} end,
+                       pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
 handle_call(["debts"], _From, State) ->
@@ -44,8 +47,8 @@ handle_call(["debts"], _From, State) ->
 
 handle_call(["user_debt", User], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
-                           {struct, [{debt, {struct,[{user1, P1},
-                                                    {user2, P2},
+                           {struct, [{debt, {struct,[{uid1, P1},
+                                                    {uid2, P2},
                                                     {amount, Amount}
                                                               ]}}]} end,
                                                      pay_server:get_user_debt(list_to_binary(User))),
@@ -53,22 +56,26 @@ handle_call(["user_debt", User], _From, State) ->
     {reply, {ok, Return2}, State};
 
 handle_call(["user_transactions", User], _From, State) ->
-    Return = lists:map(fun({P1,P2,Amount,Reason}) ->
-                           {struct, [{debt, {struct,[{user1, P1},
-                                                    {user2, P2},
-                                                    {reason, Reason},
-                                                    {amount, Amount}
+    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
+                           {struct, [{debt, {struct,[{uuid, Uuid},
+                                                     {uid1, P1},
+                                                     {uid2, P2},
+                                                     {timestamp, TimeStamp},
+                                                     {reason, Reason},
+                                                     {amount, Amount}
                                                               ]}}]} end,
                                                      pay_server:get_user_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(["transactions"], _From, State) ->
-    Return = lists:map(fun({P1,P2,Reason, Amount}) ->
-                           {struct, [{debt, {struct,[{user1, P1},
-                                                    {user2, P2},
-                                                    {reason, Reason},
-                                                    {amount, Amount}
+    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
+                           {struct, [{debt, {struct,[{uuid, Uuid},
+                                                     {uid1, P1},
+                                                     {uid2, P2},
+                                                     {timestamp, TimeStamp},
+                                                     {reason, Reason},
+                                                     {amount, Amount}
                                                               ]}}]} end,
                                                      pay_server:get_transactions()),
     Return2 = mochijson2:encode(Return),
