@@ -37,9 +37,9 @@ handle_call(["users"], _From, State) ->
 
 handle_call(["debts"], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
-                           {struct, [{debt, {struct,[{user1, P1},
-                                                    {user2, P2},
-                                                    {amount, Amount}
+                           {struct, [{debt, {struct,[{uid1, P1},
+                                                     {uid2, P2},
+                                                     {amount, Amount}
                                                               ]}}]} end,
                                                      pay_server:get_debts()),
     Return2 = mochijson2:encode(Return),

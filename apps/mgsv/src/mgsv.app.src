@@ -1,7 +1,7 @@
 {application, mgsv,
  [
   {description, ""},
-  {vsn, "0.2"},
+  {vsn, "0.2b"},
   {registered, []},
   {applications, [
                   crypto,

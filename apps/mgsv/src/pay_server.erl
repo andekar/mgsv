@@ -25,7 +25,7 @@ start_link() ->
 init([]) ->
     {_,A} = dets:open_file("../../debts_0.2.dets",[{type, set}]),
     {_,B} = dets:open_file("../../users_0.2.dets",[{type, set}]),
-    {_,C} = dets:open_file("../../debt_transactions_0.2.dets",[{type, duplicate_bag}]),
+    {_,C} = dets:open_file("../../debt_transactions_0.2b.dets",[{type, duplicate_bag}]),
     {ok, #state{debts=A, users=B, debt_record=C}}.
 
 call_pay(Message) ->
@@ -107,7 +107,7 @@ handle_call({add, {struct, Struct}}, _From, State=#state{debts=Debts, users=User
     Uuid = binary_uuid(),
     Reason = proplists:get_value(<<"reason">>, Struct),
     Amount = proplists:get_value(<<"amount">>, Struct),
-    TimeStamp = proplists:get_value(<<"timestamp">>, Struct, calendar:time_to_seconds(erlang:now())),
+    TimeStamp = proplists:get_value(<<"timestamp">>, Struct, get_timestamp()),
     %insert people in to the database at first
     dets:insert(Users, {Uid1, P1}),
     dets:insert(Users, {Uid2, P2}),
@@ -233,6 +233,17 @@ code_change(OldVsn, State=#state{debts=Debts, users=Users, debt_record=DebtRecor
     dets:close(Debts),
     {ok, #state{debts=NewDebts, users=NewUsers, debt_record=NewDebtRecord}};
 
+code_change(OldVsn, State=#state{debts=Debts, users=Users, debt_record=DebtRecord}, "0.2") ->
+    error_logger:info_msg("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2"]),
+    {_, NewDebtRecord} = dets:open_file("../../debt_transactions_0.2b.dets",[{type, duplicate_bag}]),
+    dets:traverse(DebtRecord, fun({Uuid, {P1, P2}, _T, Reason, Amount}) ->
+                 TimeStamp = get_timestamp(),
+                 error_logger:info_msg("INSERTING to table ~p ~p ~p ~p ~p ~p~n~n",[Uuid, P1, P2, TimeStamp, Reason, Amount]),
+                 dets:insert(NewDebtRecord, {Uuid, {P1, P2}, TimeStamp, Reason, Amount}),
+                 continue end),
+    dets:close(DebtRecord),
+    {ok, #state{debts=Debts, users=Users, debt_record=NewDebtRecord}};
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -257,3 +268,7 @@ uuid_to_binary(Uuid) ->
 binary_uuid() ->
     ossp_uuid:make(v4, text).
 %     list_to_binary(uuid:to_string(uuid:v4())).
+
+get_timestamp() ->
+    {Mega, Seconds, Milli} = erlang:now(),
+    Mega * 1000000000000 + Seconds * 1000000 + Milli.
