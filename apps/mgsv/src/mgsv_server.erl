@@ -1,5 +1,7 @@
 -module(mgsv_server).
 
+-include("payapp.hrl").
+
 -behaviour(gen_server).
 
 -export([start_link/0, send_message/1]).
@@ -20,68 +22,75 @@ send_message(Message) ->
 %handle_call([], _From, State) ->
 %    {reply, {ok, "ok"}, State};
 
-handle_call(Struct = [{struct, [{<<"debt">>, _Vars}]}|_Debts], _From, State) ->
+handle_call(Struct = [{?JSONSTRUCT, [{?DEBT, _Vars}]}|_Debts], _From, State) ->
     error_logger:info_msg("Adding debtjson ~n~p~n",[Struct]),
-    Reply = lists:map(fun({struct, [{<<"debt">>, Vars}]}) ->
+    Reply = lists:map(fun({?JSONSTRUCT, [{?DEBT, Vars}]}) ->
                                error_logger:info_msg("Adding debt~n~p~n",[Vars]),
                                Tmp = pay_server:add_debt({add,Vars}),
-                               {struct, [{<<"debt">>,Tmp}]}
+                               ?JSONSTRUCT([{?DEBT,Tmp}])
                                end, Struct),
     {reply, {ok, mochijson2:encode(Reply)}, State};
 
+handle_call(Uids = [{?JSONSTRUCT, [{?UID, _Vars}]}|_Uids], _From, State) ->
+    RealUids = lists:map(fun({?JSONSTRUCT, [Val]}) -> Val end, Uids),
+    error_logger:info_msg("Requesting usernames ~n~p~n",[RealUids]),
+    Struct = pay_server:get_usernames(RealUids),
+    {reply, {ok, mochijson2:encode(Struct)}, State};
+
 handle_call(["users"], _From, State) ->
     Return = lists:map(fun({Uuid, User}) ->
-                       {struct,[{uid, Uuid}, {user,User}]} end,
+                       ?JSONSTRUCT([?UID(Uuid), ?USER(User)]) end,
                        pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
 handle_call(["debts"], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
-                           {struct, [{debt, {struct,[{uid1, P1},
-                                                     {uid2, P2},
-                                                     {amount, Amount}
-                                                              ]}}]} end,
+                           ?JSONSTRUCT([?DEBT([ ?UID1(P1)
+                                              , ?UID2(P2)
+                                              , ?AMOUNT(Amount)
+                                                              ])]) end,
                                                      pay_server:get_debts()),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(["user_debt", User], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
-                           {struct, [{debt, {struct,[{uid1, P1},
-                                                    {uid2, P2},
-                                                    {amount, Amount}
-                                                              ]}}]} end,
+                           ?JSONSTRUCT([?DEBT([ ?UID1(P1)
+                                              , ?UID2(P2)
+                                              , ?AMOUNT(Amount)
+                                                              ])]) end,
                                                      pay_server:get_user_debt(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(["user_transactions", User], _From, State) ->
     Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
-                           {struct, [{debt, {struct,[{uuid, Uuid},
-                                                     {uid1, P1},
-                                                     {uid2, P2},
-                                                     {timestamp, TimeStamp},
-                                                     {reason, Reason},
-                                                     {amount, Amount}
-                                                              ]}}]} end,
+                           ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
+                                              , ?UID1(P1)
+                                              , ?UID2(P2)
+                                              , ?TIMESTAMP(TimeStamp)
+                                              , ?REASON(Reason)
+                                              , ?AMOUNT(Amount)
+                                                              ])]) end,
                                                      pay_server:get_user_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(["transactions"], _From, State) ->
     Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
-                           {struct, [{debt, {struct,[{uuid, Uuid},
-                                                     {uid1, P1},
-                                                     {uid2, P2},
-                                                     {timestamp, TimeStamp},
-                                                     {reason, Reason},
-                                                     {amount, Amount}
-                                                              ]}}]} end,
+                           ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
+                                              , ?UID1(P1)
+                                              , ?UID2(P2)
+                                              , ?TIMESTAMP(TimeStamp)
+                                              , ?REASON(Reason)
+                                              , ?AMOUNT(Amount)
+                                                              ])]) end,
                                                      pay_server:get_transactions()),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(_Request, _From, State) ->
+    error_logger:info_msg("Error no Matches~n",[]),
     Reply = ok,
     {reply, Reply, State}.
 
