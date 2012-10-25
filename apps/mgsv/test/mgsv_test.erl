@@ -1,8 +1,12 @@
 -module(mgsv_test).
 -include_lib("eunit/include/eunit.hrl").
+-include("../src/payapp.hrl").
 -compile(export_all).
 
 %% helpers
+
+state() ->
+    [{}].
 
 not_in_list_debt() ->
     { pay_server:binary_uuid()
@@ -64,13 +68,6 @@ debts_table() ->
     , {{testuid2, testuid4}, 92}
     , {{testuid1, testuid4}, -2}
     , {{testuid3, testui4}, -39}].
-
-%% duplicated macros for now
--define(APPROVED_DEBTS, approved_debts).
--define(APPROVED_DEBTS(Props), proplists:get_value(?APPROVED_DEBTS, Props, [])).
--define(DEBT_APPROVAL_TRANSACTIONS, debt_approval_transactions).
--define(DEBT_APPROVAL_TRANSACTIONS(Props), proplists:get_value(?DEBT_APPROVAL_TRANSACTIONS, Props)).
-%%
 
 -define(VALID_UID, <<"valid_email@gmail.com">>).
 -define(INVALID_UID, <<"invalid_user_id">>).
@@ -167,3 +164,7 @@ verify_sort_user_debt_already_sorted_test() ->
     {Uuid, {P1, P2}, TimeStamp, Reason, Amount} = Debt,
     Result = pay_server:sort_user_debt(Uuid, P1, P2, TimeStamp, Reason, Amount),
     ?assertEqual(Debt, Result).
+
+
+%verify_call_get_users() ->
+
