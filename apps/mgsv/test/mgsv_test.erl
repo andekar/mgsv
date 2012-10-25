@@ -108,8 +108,6 @@ verify_lookup_dets_find_test() ->
     ok = meck:unload(db_w).
 
 verify_approved_debts_default_test() ->
-    Uid = testuid1,
-    Name = name,
     ok = meck:new(db_w),
     ok = meck:expect(db_w, lookup, fun(_Name, _Uid) -> [debt_transactions()] end),
 
@@ -121,22 +119,19 @@ verify_approved_debts_default_test() ->
     ok = meck:unload(db_w).
 
 update_approved_debts_test() ->
-    Props = user_debt_transactions(),
     NewProps = new_approved_debts_fun(),
-    Result = pay_server:replace_prop(approved_debts, Props, NewProps),
 
     ok = meck:new(db_w),
     ok = meck:expect(db_w, lookup, fun(_Name, _Key) -> [debt_transactions()] end),
     ok = meck:expect(db_w, delete, fun(_DName, _DKey) -> ok end),
     ok = meck:expect(db_w, insert, fun(_IName, IProp) -> ?assertEqual(IProp, updated_debt_transactions()) end),
 
-    Res = pay_server:update_approved_debts(testuid1, name, NewProps),
+    pay_server:update_approved_debts(testuid1, name, NewProps),
 
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
 verify_add_to_earlier_debt_test() ->
-    Name = name,
     ok = meck:new(db_w),
     ok = meck:expect(db_w, lookup, fun(_Name, Key) ->  [{Key, proplists:get_value(Key, debts_table())}] end),
     ok = meck:expect(db_w, insert, fun(_Name, {Key, Val1}) ->
@@ -144,20 +139,19 @@ verify_add_to_earlier_debt_test() ->
                                            ?assertEqual(Val2 + 120, Val1)
                                    end),
 
-    Res = pay_server:add_to_earlier_debt(debt(), name),
+    pay_server:add_to_earlier_debt(debt(), name),
 
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
 verify_add_to_earlier_debt_empty_test() ->
-    Name = name,
     ok = meck:new(db_w),
-    ok = meck:expect(db_w, lookup, fun(_Name, Key) ->  [] end),
-    ok = meck:expect(db_w, insert, fun(Name, {Key, Val1}) ->
+    ok = meck:expect(db_w, lookup, fun(_Name, _Key) ->  [] end),
+    ok = meck:expect(db_w, insert, fun(_Name, {_Key, Val1}) ->
                                            ?assertEqual(120, Val1)
                                    end),
 
-    Res = pay_server:add_to_earlier_debt(not_in_list_debt(), name),
+    pay_server:add_to_earlier_debt(not_in_list_debt(), name),
 
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
