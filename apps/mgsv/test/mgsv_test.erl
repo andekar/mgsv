@@ -6,7 +6,36 @@
 %% helpers
 
 state() ->
-    [{}].
+    [ {?DEBTS,?DEBTS}
+    , {?USERS, ?USERS}
+    , {?DEBT_RECORD, ?DEBT_RECORD}
+    , {?DEBT_APPROVAL_TRANSACTIONS, ?DEBT_APPROVAL_TRANSACTIONS}].
+
+user_db() ->
+    [ {pay_server:binary_uuid(), <<"user1">>}
+    , {pay_server:binary_uuid(), <<"user3">>}
+    , {pay_server:binary_uuid(), <<"user4">>}
+    , {pay_server:binary_uuid(), <<"user5">>}
+    , {pay_server:binary_uuid(), <<"user6">>}
+    , {pay_server:binary_uuid(), <<"user7">>}].
+
+%% TODO add several debts per user
+user_transactions(0) ->
+    {[], [], [], []};
+user_transactions(Num) ->
+    Uuid = pay_server:binary_uuid(),
+    User1 = pay_server:binary_uuid(),
+    User2 = pay_server:binary_uuid(),
+    Amount = Num *10,
+    Debt = make_debt(Uuid, User1, User2, Amount),
+    Transaction1 = debt_transactions(User1, [Uuid], []),
+    Transaction2 = debt_transactions(User2, [Uuid], []),
+    { OtherUsers, OtherDebts, OtherApprovalDebt, OtherDebt } = user_transactions(Num - 1),
+    { [{User1,<<"user1">>}, {User2, <<"user2">>} |OtherUsers]
+    , [ {{User1, User2}, Amount} |OtherDebts]
+    , [ Transaction1, Transaction2 |OtherApprovalDebt]
+    , [ Debt |OtherDebt] }.
+
 
 not_in_list_debt() ->
     { pay_server:binary_uuid()
@@ -16,11 +45,17 @@ not_in_list_debt() ->
     , 120}.
 
 debt() ->
-    { pay_server:binary_uuid()
-    , {testuid1, testuid2}
+    make_debt(testuid1, testuid2, 120).
+
+make_debt(User1, User2, Amount) ->
+    make_debt(pay_server:binary_uuid(), User1, User2, Amount).
+
+make_debt(Uuid, User1, User2, Amount) ->
+    { Uuid
+    , {User1, User2}
     , pay_server:get_timestamp()
     , <<"whatever reason">>
-    , 120}.
+    , Amount}.
 
 reversed_debt(Debt) ->
     {Uuid, {P1, P2}, TimeStamp, Reason, Amount} = Debt,
@@ -31,10 +66,16 @@ reversed_debt(Debt) ->
     , -1* Amount}.
 
 debt_transactions() ->
-    {testuid1, user_debt_transactions()}.
+    [{testuid1, user_debt_transactions()}].
+
+debt_transactions(Uuid, ApprovedDebts, NonApprovedDebts) ->
+    {Uuid, user_debt_transactions(ApprovedDebts, NonApprovedDebts)}.
 
 user_debt_transactions() ->
     [{approved_debts, approved_debts_fun()}, {nonapproved_debts, nonapproved_debts_fun()}].
+
+user_debt_transactions(ApprovedDebts, NonApprovedDebts) ->
+    [{?APPROVED_DEBTS, ApprovedDebts}, {?NOT_APPROVED_DEBTS, NonApprovedDebts}].
 
 updated_user_debt_transactions() ->
     [{approved_debts, updated_approved_debts_fun()}, {nonapproved_debts, nonapproved_debts_fun()}].
@@ -106,7 +147,7 @@ verify_lookup_dets_find_test() ->
 
 verify_approved_debts_default_test() ->
     ok = meck:new(db_w),
-    ok = meck:expect(db_w, lookup, fun(_Name, _Uid) -> [debt_transactions()] end),
+    ok = meck:expect(db_w, lookup, fun(_Name, _Uid) -> debt_transactions() end),
 
     Res = pay_server:approved_debts(testuid1, name),
 
@@ -119,7 +160,7 @@ update_approved_debts_test() ->
     NewProps = new_approved_debts_fun(),
 
     ok = meck:new(db_w),
-    ok = meck:expect(db_w, lookup, fun(_Name, _Key) -> [debt_transactions()] end),
+    ok = meck:expect(db_w, lookup, fun(_Name, _Key) -> debt_transactions() end),
     ok = meck:expect(db_w, delete, fun(_DName, _DKey) -> ok end),
     ok = meck:expect(db_w, insert, fun(_IName, IProp) -> ?assertEqual(IProp, updated_debt_transactions()) end),
 
@@ -166,5 +207,290 @@ verify_sort_user_debt_already_sorted_test() ->
     ?assertEqual(Debt, Result).
 
 
-%verify_call_get_users() ->
+verify_call_get_users_test() ->
+    UserDb = user_db(),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, foldl, fun(Fun, Acc, users) -> lists:foldl(Fun, Acc, UserDb) end),
+    Result = pay_server:handle_call(get_users, undefined, state()),
 
+    Expected = {reply, lists:reverse(UserDb), state()},
+    ?assertEqual(Expected, Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_get_user_transactions_test() ->
+    { [_User1|_] = _OtherUsers
+    , _OtherDebts
+    , [ApprovalDebt|_] = _OtherApprovalDebt
+    , [V|_] = OtherDebt } = user_transactions(15),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, lookup, fun(Any, Key) -> case Any of
+                                                        ?DEBT_RECORD -> [proplists:lookup(Key, OtherDebt)];
+                                                         _ -> [ApprovalDebt]
+                                                     end
+                                   end),
+    Result = pay_server:handle_call({get_user_transactions, <<"user1">>}, undefined, state()),
+
+    {U, {P1, P2}, T, R, A} = V,
+    Expected = {reply, [{U, P1, P2, T, R, A}] , state()},
+    ?assertEqual(Expected, Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_get_debts_test() ->
+    { [_User1|_] = _OtherUsers
+    , OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , [_V|_] = _OtherDebt } = user_transactions(15),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, foldl, fun(Fun, Acc, _Name) -> lists:foldl(Fun, Acc, OtherDebts)
+                                   end),
+    Result = pay_server:handle_call(get_debts, undefined, state()),
+    Expected = {reply, lists:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], OtherDebts), state()},
+    ?assertEqual(Expected, Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+
+verify_call_get_transactions_test() ->
+    { [_User1|_] = _OtherUsers
+    , _OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , [_V|_] = OtherDebt } = user_transactions(15),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, foldl, fun(Fun, Acc, _Name) -> lists:foldl(Fun, Acc, OtherDebt)
+                                   end),
+    Result = pay_server:handle_call(get_transactions, undefined, state()),
+    Expected = {reply, lists:foldl(fun({Uuid, {Uuid1,Uuid2}, TimeStamp, Reason, Amount}, Acc) ->
+                                  [{ Uuid
+                                     , Uuid1
+                                     , Uuid2
+                                     , TimeStamp
+                                     , Reason
+                                     , Amount}|Acc] end, []
+                          , OtherDebt), state()},
+    ?assertEqual(Expected, Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_get_usernames_test() ->
+    { [_User1|_] = OtherUsers
+    , _OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , [_V|_] = _OtherDebt } = user_transactions(15),
+    Uids = lists:nthtail(10, lists:map(fun({Uid,_}) -> Uid end, OtherUsers)),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, lookup, fun(_Name, Key) -> case Key of
+                                                          <<"unknown">> -> [];
+                                                          _ -> [proplists:lookup(Key, OtherUsers)] end end),
+
+    Result = pay_server:handle_call({get_usernames, [<<"unknown">>|Uids]}, undefined, state()),
+    Expected = { reply
+               , [{error,user_not_found}|lists:map( fun({Uid, Username}) ->
+                                   ?JSONSTRUCT([?UID(Uid), ?USER(Username)]) end
+                          , lists:nthtail(10, OtherUsers))]
+               , state()},
+    ?assertEqual(Expected, Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_add_normal_debt_test() ->
+    { [_User1|_] = _OtherUsers
+    , _OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , _OtherDebt } = user_transactions(15),
+    Uid1 = <<"anders@gmail.com">>,
+    Uid2 = <<"mattias@gmail.com">>,
+    User1 = <<"Anders">>,
+    User2 = <<"Mattias">>,
+    Reason = <<"debt reason">>,
+    Amount = 20,
+    DebtToAdd = {?JSONSTRUCT, [ {?UID1, Uid1}
+                              , {?UID2, Uid2}
+                              , {?USER1, User1}
+                              , {?USER2, User2}
+                              , {?REASON, Reason}
+                              , {?AMOUNT, Amount}
+                              , {?TIMESTAMP, 30}
+                              ]},
+
+    %% Uids = lists:nthtail(10, lists:map(fun({Uid,_}) -> Uid end, OtherUsers)),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, lookup
+                     , fun(_Name, _Key) -> []
+                       end),
+
+    %%Check insert values
+    ok = meck:expect( db_w, insert
+                    , fun(Db, V) ->
+                              case Db of
+                                  ?USERS ->
+                                      {Uid, Username} = V,
+                                      ?assertEqual(true, lists:any(fun(Val) -> Uid =:= Val end, [Uid1, Uid2])),
+                                      ?assertEqual(true, lists:any(fun(Val) -> Username =:= Val end, [User1, User2]));
+                                  ?DEBTS ->
+                                      {_Key, Amount2} = V,
+                                      ?assertEqual(Amount, Amount2);
+                                  _ -> ok
+                              end
+
+                      end),
+    %% Check delete values
+    ok = meck:expect(db_w, delete, fun(_,Val) -> ?assertEqual( true
+                                                             , lists:any(fun(V) -> Val =:= V end,
+                                                                       [Uid1, Uid2])
+                                                            ),
+                                                 ok end),
+
+    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    Expected =[ {?UID1, Uid1}
+              , {?USER1, User1}
+              , {?UID2, Uid2}
+              , {?USER2, User2}
+              , {?REASON, Reason}
+              , {?AMOUNT, 20}
+              , {?TIMESTAMP, 30}
+              , {?STATUS, <<"ok">>}],
+    lists:map( fun({Type, Val1}) ->
+                       case proplists:get_value(Type, Expected) of
+                           undefined -> ?assertEqual(?UUID, Type);
+                           Val2 -> ?assertEqual(Val1, Val2)
+                       end
+               end
+             , Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_add_debt_no_userids_test() ->
+    { [_User1|_] = _OtherUsers
+    , _OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , _OtherDebt } = user_transactions(15),
+    User1 = <<"Anders">>,
+    User2 = <<"Mattias">>,
+    Reason = <<"debt reason">>,
+    Amount = 20,
+    DebtToAdd = {?JSONSTRUCT, [ {?USER1, User1}
+                              , {?USER2, User2}
+                              , {?REASON, Reason}
+                              , {?AMOUNT, Amount}
+                              , {?TIMESTAMP, 30}
+                              ]},
+
+    %% Uids = lists:nthtail(10, lists:map(fun({Uid,_}) -> Uid end, OtherUsers)),
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, lookup
+                     , fun(_Name, _Key) -> []
+                       end),
+
+    %%Check insert values
+    ok = meck:expect( db_w, insert
+                    , fun(Db, V) ->
+                              case Db of
+                                  ?USERS ->
+                                      {_Uid, Username} = V,
+                                      ?assertEqual(true, lists:any(fun(Val) -> Username =:= Val end, [User1, User2]));
+                                  ?DEBTS ->
+                                      {_Key, Amount2} = V,
+                                      ?assertEqual(true, lists:any(fun(Val) -> Val =:= Amount2 end, [Amount, -1*Amount]));
+                                  _ -> ok
+                              end
+
+                      end),
+    %% Check delete values
+    ok = meck:expect(db_w, delete, fun(_,_Val) ->
+                                                 ok end),
+
+    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    Expected =[ {?USER1, User1}
+              , {?USER2, User2}
+              , {?REASON, Reason}
+              , {?AMOUNT, Amount}
+              , {?TIMESTAMP, 30}
+              , {?STATUS, <<"ok">>}],
+    lists:map( fun({Type, Val1}) ->
+                       case proplists:get_value(Type, Expected) of
+                           undefined -> ok ; %?assertEqual(?UUID, Type);
+                           Val2 -> ?assertEqual(Val1, Val2)
+                       end
+               end
+             , Result),
+
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+verify_call_add_debt_existing_user_test() ->
+    { [{Uid1, RealUser1}, {Uid2, RealUser2}| _] = OtherUsers
+    , _OtherDebts
+    , [_ApprovalDebt|_] = _OtherApprovalDebt
+    , _OtherDebt } = user_transactions(15),
+    User1 = <<"Anders">>,
+    User2 = <<"Mattias">>,
+    Reason = <<"debt reason">>,
+    Amount = 20,
+    DebtToAdd = {?JSONSTRUCT, [ {?UID1, Uid1}
+                              , {?UID2, Uid2}
+                              , {?USER1, User1}
+                              , {?USER2, User2}
+                              , {?REASON, Reason}
+                              , {?AMOUNT, Amount}
+                              , {?TIMESTAMP, 30}
+                              ]},
+
+    ok = meck:new(db_w),
+    ok = meck:expect(db_w, lookup
+                     , fun(Name, Key) ->
+                               case Name of
+                                   ?USERS -> [proplists:lookup(Key, OtherUsers)];
+                                   _ -> []
+                               end
+                       end),
+
+    %%Check insert values
+    ok = meck:expect( db_w, insert
+                    , fun(Db, V) ->
+                              case Db of
+                                  ?USERS ->
+                                      {Uid, Username} = V,
+                                      ?assertEqual(true, lists:any(fun(Val) -> Uid =:= Val end, [Uid1, Uid2])),
+                                      ?assertEqual(true, lists:any(fun(Val) -> Username =:= Val end, [RealUser1, RealUser2]));
+                                  ?DEBTS ->
+                                      {_Key, Amount2} = V,
+                                      ?assertEqual(true, lists:any(fun(Val) -> Val =:= Amount2 end, [Amount, -1*Amount]));
+                                  _ -> ok
+                              end
+
+                      end),
+    %% Check delete values
+    ok = meck:expect(db_w, delete, fun(_,Val) -> ?assertEqual( true
+                                                             , lists:any(fun(V) -> Val =:= V end,
+                                                                       [Uid1, Uid2])
+                                                            ),
+                                                 ok end),
+
+    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    Expected =[ {?UID1, Uid1}
+              , {?USER1, RealUser1}
+              , {?UID2, Uid2}
+              , {?USER2, RealUser2}
+              , {?REASON, Reason}
+%              , {?AMOUNT, 20}
+              , {?TIMESTAMP, 30}
+              , {?STATUS, <<"ok">>}],
+    lists:map( fun({Type, Val1}) ->
+                       case proplists:get_value(Type, Expected) of
+                           undefined -> ok ; %?assertEqual(?UUID, Type);
+                           Val2 -> ?assertEqual(Val1, Val2)
+                       end
+               end
+             , Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).

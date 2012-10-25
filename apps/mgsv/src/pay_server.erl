@@ -123,7 +123,7 @@ handle_call(get_transactions, _From, State) ->
 
 handle_call({get_usernames, Uids}, _From, State) ->
     Users = proplists:get_value(?USERS, State),
-    RetUsers = lists:map(fun({_UID, TUid}) ->
+    RetUsers = lists:map(fun(TUid) ->
                       Uid = ?UID_TO_LOWER(TUid),
                       case db_w:lookup(Users, Uid) of
                           [] -> {error, user_not_found};
@@ -148,13 +148,15 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     Amount = proplists:get_value(?AMOUNT, Struct),
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
     %insert people in to the database at first
-    _Ignore = case db_w:lookup(Users, Uid1) of
-                  [] -> db_w:insert(Users, {Uid1, P1});
-                  _  -> nothing
+    P1ToUse = case db_w:lookup(Users, Uid1) of
+                  [] -> db_w:insert(Users, {Uid1, P1}),
+                        P1;
+                  [{_,R}]  -> R
               end,
-    _Ignore = case db_w:lookup(Users, Uid2) of
-                  [] -> db_w:insert(Users, {Uid2, P2});
-                  _  -> nothing
+    P2ToUse = case db_w:lookup(Users, Uid2) of
+                  [] -> db_w:insert(Users, {Uid2, P2}),
+                        P2;
+                  [{_,Ret}]  -> Ret
               end,
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp,  Reason, Amount)),
     %% change to unapproved later
@@ -162,9 +164,9 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     update_approved_debts(Uid2, ApprovalDebt, [Uuid]),
     add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
     {reply, [ ?UID1(Uid1)
-            , ?USER1(P1)
+            , ?USER1(P1ToUse)
             , ?UID2(Uid2)
-            , ?USER2(P2)
+            , ?USER2(P2ToUse)
             , ?UUID(Uuid)
             , ?REASON(Reason)
             , ?AMOUNT(Amount)
@@ -305,7 +307,7 @@ get_timestamp() ->
 
 lookup_dets(Name, Key, Default) ->
     case db_w:lookup(Name, Key) of
-        [] -> Default;
+        []  -> Default;
         Any -> Any
     end.
 
@@ -321,7 +323,7 @@ approved_debts(Key, Name) ->
 %% Name = table name
 %% Items [items] list of items to insert
 update_approved_debts(Key, Name, Items) ->
-    [{Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
     error_logger:info_msg("updating approved debts: ~p~n", [?APPROVED_DEBTS(Props) ++ Items]),
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,

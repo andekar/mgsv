@@ -77,7 +77,7 @@
 -define(APPROVED_DEBTS, approved_debts).
 -define(APPROVED_DEBTS(Props), proplists:get_value(?APPROVED_DEBTS, Props, [])).
 
--define(NOT_APPROVED_DEBTS, approved_debts).
+-define(NOT_APPROVED_DEBTS, not_approved_debts).
 -define(NOT_APPROVED_DEBTS(Props), proplists:get_value(?NOT_APPROVED_DEBTS, Props, [])).
 
 %% to lower and check @
