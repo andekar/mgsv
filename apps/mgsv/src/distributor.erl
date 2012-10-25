@@ -35,9 +35,7 @@ to_html(ReqData, Context) ->
          Any ->
                     error_logger:info_msg("Get request received~n~p~n",[Any]),
                     {ok, Result} = mgsv_server:send_message(Any),
-                    {Result, ReqData, Context};
-         _ ->       Body2 = io_lib:format("OK", []),
-                    {Body2, ReqData, Context}
-                    end,
+                    {Result, ReqData, Context}
+        end,
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
