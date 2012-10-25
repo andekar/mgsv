@@ -79,3 +79,6 @@
 
 -define(NOT_APPROVED_DEBTS, approved_debts).
 -define(NOT_APPROVED_DEBTS(Props), proplists:get_value(?NOT_APPROVED_DEBTS, Props, [])).
+
+%% to lower and check @
+-define(UID_TO_LOWER(User), list_to_binary(string:to_lower(binary_to_list(User)))).
