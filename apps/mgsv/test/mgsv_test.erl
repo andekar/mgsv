@@ -133,6 +133,7 @@ verify_lookup_dets_default_test() ->
 
     ?assertEqual([apa, bepa, cepa], pay_server:lookup_dets(name, key, [apa, bepa, cepa])),
 
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -142,6 +143,7 @@ verify_lookup_dets_find_test() ->
 
     ?assertEqual([cepa, bepa], pay_server:lookup_dets(name, key, [apa, bepa, cepa])),
 
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -153,6 +155,7 @@ verify_approved_debts_default_test() ->
 
     ?assertEqual(approved_debts_fun(), Res),
 
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -166,6 +169,9 @@ update_approved_debts_test() ->
 
     pay_server:update_approved_debts(testuid1, name, NewProps),
 
+    ?assertEqual(1,meck:num_calls(db_w, delete, ['_','_'])),
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
+    ?assertEqual(1,meck:num_calls(db_w, insert, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -179,6 +185,8 @@ verify_add_to_earlier_debt_test() ->
 
     pay_server:add_to_earlier_debt(debt(), name),
 
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
+    ?assertEqual(1,meck:num_calls(db_w, insert, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -191,6 +199,8 @@ verify_add_to_earlier_debt_empty_test() ->
 
     pay_server:add_to_earlier_debt(not_in_list_debt(), name),
 
+    ?assertEqual(1,meck:num_calls(db_w, insert, ['_','_'])),
+    ?assertEqual(1,meck:num_calls(db_w, lookup, ['_','_'])),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -216,6 +226,7 @@ verify_call_get_users_test() ->
     Expected = {reply, lists:reverse(UserDb), state()},
     ?assertEqual(Expected, Result),
 
+    ?assertEqual(1,meck:num_calls(db_w, foldl, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -236,6 +247,7 @@ verify_call_get_user_transactions_test() ->
     Expected = {reply, [{U, P1, P2, T, R, A}] , state()},
     ?assertEqual(Expected, Result),
 
+    ?assertEqual(2,meck:num_calls(db_w, lookup, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -251,6 +263,7 @@ verify_call_get_debts_test() ->
     Expected = {reply, lists:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], OtherDebts), state()},
     ?assertEqual(Expected, Result),
 
+    ?assertEqual(1,meck:num_calls(db_w, foldl, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -274,6 +287,7 @@ verify_call_get_transactions_test() ->
                           , OtherDebt), state()},
     ?assertEqual(Expected, Result),
 
+    ?assertEqual(1,meck:num_calls(db_w, foldl, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -296,6 +310,7 @@ verify_call_get_usernames_test() ->
                , state()},
     ?assertEqual(Expected, Result),
 
+    ?assertEqual(21,meck:num_calls(db_w, lookup, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -364,6 +379,9 @@ verify_call_add_normal_debt_test() ->
                end
              , Result),
 
+    ?assertEqual(2,meck:num_calls(db_w, delete, '_')),
+    ?assertEqual(6,meck:num_calls(db_w, insert, '_')),
+    ?assertEqual(5,meck:num_calls(db_w, lookup, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -422,7 +440,9 @@ verify_call_add_debt_no_userids_test() ->
                end
              , Result),
 
-
+    ?assertEqual(5,meck:num_calls(db_w, lookup, '_')),
+    ?assertEqual(6,meck:num_calls(db_w, insert, '_')),
+    ?assertEqual(2,meck:num_calls(db_w, delete, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -491,6 +511,10 @@ verify_call_add_debt_existing_user_test() ->
                end
              , Result),
 
+    ?assertEqual(5,meck:num_calls(db_w, lookup, '_')),
+    ?assertEqual(4,meck:num_calls(db_w, insert, '_')),
+    ?assertEqual(2,meck:num_calls(db_w, delete, '_')),
+
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -536,6 +560,9 @@ verify_call_change_username_test() ->
 
     pay_server:handle_cast({change_username, User1, NewUser}, state()),
 
+    ?assertEqual(4,meck:num_calls(db_w, lookup, '_')),
+    ?assertEqual(2,meck:num_calls(db_w, insert, '_')),
+    ?assertEqual(3,meck:num_calls(db_w, delete, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
 
@@ -581,5 +608,8 @@ verify_call_transfer_debts_test() ->
 
     pay_server:handle_cast({transfer_debts, User1, NewUser}, state()),
 
+    ?assertEqual(3,meck:num_calls(db_w, lookup, '_')),
+    ?assertEqual(1,meck:num_calls(db_w, insert, '_')),
+    ?assertEqual(3,meck:num_calls(db_w, delete, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
