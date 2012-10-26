@@ -139,29 +139,24 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     DebtRecord = ?DEBT_RECORD(State),
     Users = ?USERS(State),
     ApprovalDebt = ?APPROVED_DEBTS(State),
-    Uid1 = ?UID_TO_LOWER(proplists:get_value(?UID1, Struct, binary_uuid())),
-    Uid2 = ?UID_TO_LOWER(proplists:get_value(?UID2, Struct, binary_uuid())),
-    P1 = proplists:get_value(?USER1, Struct, binary_uuid()),
-    P2 = proplists:get_value(?USER2, Struct, binary_uuid()),
     Uuid = binary_uuid(),
     Reason = proplists:get_value(?REASON, Struct),
     Amount = proplists:get_value(?AMOUNT, Struct),
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
-    %insert people in to the database at first
-    P1ToUse = case db_w:lookup(Users, Uid1) of
-                  [] -> db_w:insert(Users, {Uid1, P1}),
-                        P1;
-                  [{_,R}]  -> R
-              end,
-    P2ToUse = case db_w:lookup(Users, Uid2) of
-                  [] -> db_w:insert(Users, {Uid2, P2}),
-                        P2;
-                  [{_,Ret}]  -> Ret
-              end,
+    %% per user
+    [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
+        = lists:map(fun({P, U}) ->
+                    Uid  = ?UID_TO_LOWER(proplists:get_value(U, Struct, binary_uuid())),
+                    User = proplists:get_value(P, Struct, binary_uuid()),
+                    PToUse = case db_w:lookup(Users, Uid) of
+                                  [] -> db_w:insert(Users, {Uid, User}),
+                                        User;
+                                  [{_,R}]  -> R
+                              end,
+                    update_approved_debts(Uid, ApprovalDebt, [Uuid]),
+                    {PToUse, Uid} end,
+                            [{?USER1, ?UID1}, {?USER2, ?UID2}]),
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp,  Reason, Amount)),
-    %% change to unapproved later
-    update_approved_debts(Uid1, ApprovalDebt, [Uuid]),
-    update_approved_debts(Uid2, ApprovalDebt, [Uuid]),
     add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
     {reply, [ ?UID1(Uid1)
             , ?USER1(P1ToUse)
@@ -187,6 +182,7 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
     ok = verify_uid(TNewUser),
+
     [] = db_w:lookup(Users, TNewUser), %% make sure we do not create duplicate users.
     [{TOldUser, Username}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
 
@@ -201,8 +197,8 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   ok = db_w:delete(DebtRecord, Id),
                                   case Uid1 of
-                                      TOldUser -> db_w:insert(DebtRecord, {Uuid, TNewUser, Uid2, Time, Reason, Amount});
-                                      _        -> db_w:insert(DebtRecord, {Uuid, Uid1, TNewUser, Time, Reason, Amount})
+                                      TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount));
+                                      _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount))
                                   end
                           end, DebtIds),
 
