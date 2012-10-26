@@ -481,7 +481,6 @@ verify_call_add_debt_existing_user_test() ->
               , {?UID2, Uid2}
               , {?USER2, RealUser2}
               , {?REASON, Reason}
-%              , {?AMOUNT, 20}
               , {?TIMESTAMP, 30}
               , {?STATUS, <<"ok">>}],
     lists:map( fun({Type, Val1}) ->
@@ -491,6 +490,51 @@ verify_call_add_debt_existing_user_test() ->
                        end
                end
              , Result),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).
+
+
+verify_call_change_username_test() ->
+    { [{User1, Username}|_] = _OtherUsers
+    , _OtherDebts
+    , [ApprovalDebt|_] = _OtherApprovalDebt
+    , [_V|_] = OtherDebt } = user_transactions(15),
+    NewUser = <<"anDeRsk84@gmail.com">>,
+    NewUserModified = <<"andersk84@gmail.com">>,
+    ok = meck:new(db_w),
+    ok = meck:expect( db_w
+                    , lookup
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?USERS, User1} -> [{User1, Username}];
+                                  {?USERS, NewUserModified} -> [];
+                                  {?USERS, _} -> ?assert(false);
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> [ApprovalDebt];
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> ?assert(false);
+                                  {?DEBT_RECORD, Any} -> [proplists:lookup(Any, OtherDebt)];
+                                  _      -> ?assert(false) end end),
+    ok = meck:expect( db_w
+                    , delete
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> ?assert(true);
+                                  {?USERS, User1} -> ?assert(true);
+                                  {?DEBT_RECORD, _} -> ?assert(true);
+                                  _ -> ?assert(false)
+                              end
+                              end),
+    ok = meck:expect( db_w
+                    , insert
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?USERS, {NewUserModified, Username}} -> ?assert(true);
+                                  {?DEBT_RECORD, _} -> ?assert(true);
+                                  _ -> ?assert(false)
+                              end
+                      end),
+
+    pay_server:handle_cast({change_username, User1, NewUser}, state()),
 
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
