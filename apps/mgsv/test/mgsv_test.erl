@@ -538,3 +538,48 @@ verify_call_change_username_test() ->
 
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
+
+
+verify_call_transfer_debts_test() ->
+    { [{User1, Username}|_] = _OtherUsers
+    , _OtherDebts
+    , [ApprovalDebt|_] = _OtherApprovalDebt
+    , [_V|_] = OtherDebt } = user_transactions(15),
+    NewUser = <<"andersk84@gmail.com">>,
+
+    ok = meck:new(db_w),
+    ok = meck:expect( db_w
+                    , lookup
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?USERS, User1} -> [{User1, Username}];
+                                  {?USERS, NewUser} -> [{NewUser,<<"">>}];
+                                  {?USERS, _} -> ?assert(false);
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> [ApprovalDebt];
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> ?assert(false);
+                                  {?DEBT_RECORD, Any} -> [proplists:lookup(Any, OtherDebt)];
+                                  _      -> ?assert(false) end end),
+    ok = meck:expect( db_w
+                    , delete
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?DEBT_APPROVAL_TRANSACTIONS, User1} -> ?assert(true);
+                                  {?USERS, User1} -> ?assert(true);
+                                  {?DEBT_RECORD, _} -> ?assert(true);
+                                  _ -> ?assert(false)
+                              end
+                              end),
+    ok = meck:expect( db_w
+                    , insert
+                    , fun(Name, Key) ->
+                              case {Name, Key} of
+                                  {?USERS, {NewUser, Username}} -> ?assert(true);
+                                  {?DEBT_RECORD, _} -> ?assert(true);
+                                  _ -> ?assert(false)
+                              end
+                      end),
+
+    pay_server:handle_cast({transfer_debts, User1, NewUser}, state()),
+
+    true = meck:validate(db_w),
+    ok = meck:unload(db_w).

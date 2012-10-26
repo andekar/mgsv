@@ -174,6 +174,7 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 %% notice how any one can change their username if we add this to calls
+%% TODO Add change of calculated debt
 handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     Users = ?USERS(State),
     DebtRecord = ?DEBT_RECORD(State),
@@ -207,34 +208,38 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
 
 % take care, any one might transfer debts to another person
 % but he will have to guess the userid
-handle_cast({transfer_debts, TOldUser, TNewUser}, State) ->
-    Debts = ?DEBTS(State),
+% note that these should be not approved debts
+%% REMEMBER to change so that it changes debts as well
+handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
+%    Debts = ?DEBTS(State),
     Users = ?USERS(State),
     DebtRecord = ?DEBT_RECORD(State),
-    StrOldUser = binary_to_list(TOldUser),
-    OldUser = case string:rstr(StrOldUser, "@") of
-                  0 -> TOldUser;
-                  _ -> list_to_binary(string:to_lower(StrOldUser))
-              end,
-    StrNewUser = binary_to_list(TNewUser),
-    NewUser = list_to_binary(string:to_lower(StrNewUser)),
-    0 = string:rstr(StrOldUser, "@"), % to make sure we transfer only uuid users we check that the id does not contain an @
-    ok = db_w:delete(Users, OldUser), % the new user must already exist
-    NewUser = db_w:lookup(Users, NewUser),%the user must exist already
-    DebtsList = db_w:match(DebtRecord, {'$1', {OldUser, '$2'}, '$3', '$4', '$5'}),
-    DebtsList2 = db_w:match(DebtRecord, {'$1', {'$2', OldUser}, '$3', '$4', '$5'}),
-    ok = db_w:match_delete(DebtRecord, {'$1', {OldUser, '$2'}, '$3', '$4', '$5'}),
-    ok = db_w:match_delete(DebtRecord, {'$1', {'$2', OldUser}, '$3', '$4', '$5'}),
-    lists:map(fun([Uuid, V1, V4, V2, V3]) -> db_w:insert(DebtRecord, {Uuid, {NewUser, V1}, V4, V2, V3}), [] end, DebtsList),
-    lists:map(fun([Uuid, V1, V4, V2, V3]) -> db_w:insert(DebtRecord, {Uuid, {V1, NewUser}, V4, V2, V3}), [] end, DebtsList2),
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
 
-    DList = db_w:match(Debts, {{OldUser, '$1'}, '$2'}),
-    DList2 = db_w:match(Debts, {{'$1', OldUser}, '$2'}),
-    ok = db_w:match_delete(Debts, {{'$1', OldUser}, '$2'}),
-    ok = db_w:match_delete(Debts, {{OldUser, '$1'}, '$2'}),
-    lists:map(fun([V1,V2]) -> db_w:insert(Debts, {NewUser,V1,V2}) end, DList),
-    lists:map(fun([V1,V2]) -> db_w:insert(Debts, {V1, NewUser, V2}) end, DList2),
-    error_logger:info_msg("Transferred debts from ~p to ~p~n", [OldUser, NewUser]),
+    TOldUser = ?UID_TO_LOWER(TTOldUser),
+    TNewUser = ?UID_TO_LOWER(TTNewUser),
+    % to make sure we transfer only uuid users we check that the id does not contain an @
+    0 = string:rstr(binary_to_list(TOldUser), "@"),
+
+    ok = verify_uid(TNewUser),
+    ok = db_w:delete(Users, TOldUser),
+
+    [{TNewUser, _Username}] = db_w:lookup(Users, TNewUser),%the user must exist already
+
+    DebtIds = approved_debts(TOldUser, ApprovalDebt),
+
+    ok = db_w:delete(ApprovalDebt, TOldUser),
+    error_logger:info_msg("user approval debt ids: ~p~n", [DebtIds]),
+    _DebtLists = lists:map(fun(Id) ->
+                                  [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
+                                  ok = db_w:delete(DebtRecord, Id),
+                                  case Uid1 of
+                                      TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount));
+                                      _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount))
+                                  end
+                          end, DebtIds),
+
+    error_logger:info_msg("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
