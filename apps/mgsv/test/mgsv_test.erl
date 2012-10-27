@@ -114,7 +114,7 @@ debts_table() ->
 -define(INVALID_UID, <<"invalid_user_id">>).
 
 verify_user_valid_test() ->
-    ?assertEqual(pay_server:verify_uid(?VALID_UID), ok).
+    ?assertEqual(pay_server:verify_uid(?VALID_UID), ?VALID_UID).
 
 verify_user_invalid_test() ->
     ?assertEqual(pay_server:verify_uid(?INVALID_UID), invalid).
@@ -302,7 +302,7 @@ verify_call_get_usernames_test() ->
                                                           <<"unknown">> -> [];
                                                           _ -> [proplists:lookup(Key, OtherUsers)] end end),
 
-    Result = pay_server:handle_call({get_usernames, [<<"unknown">>|Uids]}, undefined, state()),
+    Result = pay_server:handle_call({get_usernames, [{?UID, <<"unknown">>}| lists:map(fun(Val) -> {?UID, Val} end, Uids)]}, undefined, state()),
     Expected = { reply
                , [{error,user_not_found}|lists:map( fun({Uid, Username}) ->
                                    ?JSONSTRUCT([?UID(Uid), ?USER(Username)]) end
