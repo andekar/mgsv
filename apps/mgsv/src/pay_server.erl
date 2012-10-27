@@ -133,7 +133,7 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     Debts = ?DEBTS(State),
     DebtRecord = ?DEBT_RECORD(State),
     Users = ?USERS(State),
-    ApprovalDebt = ?APPROVED_DEBTS(State),
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     Uuid = binary_uuid(),
     Reason = proplists:get_value(?REASON, Struct),
     Amount = proplists:get_value(?AMOUNT, Struct),
@@ -142,11 +142,12 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
         = lists:map(fun({P, U}) ->
                     Uid  = ?UID_TO_LOWER(proplists:get_value(U, Struct, binary_uuid())),
-                    User = proplists:get_value(P, Struct, binary_uuid()),
                     PToUse = case db_w:lookup(Users, Uid) of
-                                  [] -> db_w:insert(Users, {Uid, User}),
+                                 %% make sure that we never autogenerate username
+                                  [] -> [{P, User}] = proplists:lookup_all(P, Struct),
+                                        db_w:insert(Users, {Uid, User}),
                                         User;
-                                  [{_,R}]  -> R
+                                  [{_, R}]  -> R
                               end,
                     update_approved_debts(Uid, ApprovalDebt, [Uuid]),
                     {PToUse, Uid} end,
@@ -202,7 +203,11 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     OldDebts = get_tot_debts(Debts, TOldUser),
     lists:foreach( fun({P1, P2, Amount}) ->
                            dets:delete(Debts, {P1,P2}),
-                           add_to_earlier_debt(sort_user_debt(undef, P1, P2, undef, undef, Amount), Debts)
+                           case P1 of
+                               TOldUser ->
+                                   add_to_earlier_debt(sort_user_debt(undef, TNewUser, P2, undef, undef, Amount), Debts);
+                               _ -> add_to_earlier_debt(sort_user_debt(undef, P1, TNewUser, undef, undef, Amount), Debts)
+                           end
                    end
                  , OldDebts),
 
