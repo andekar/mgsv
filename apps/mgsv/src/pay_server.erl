@@ -83,12 +83,7 @@ handle_call(get_users, _From, State) ->
     {reply, UserList, State};
 
 handle_call({get_user_debt, User},  _From, State) ->
-    Debts = ?DEBTS(State),
-    DebtsList = db_w:match(Debts, {{User, '$1'}, '$2'}),
-    DebtsList2 = db_w:match(Debts, {{'$1', User}, '$2'}),
-    DebtLists = lists:map(fun([V1,V2]) -> {User,V1,V2} end, DebtsList),
-    DebtLists2 = lists:map(fun([V1,V2]) -> {V1, User, V2} end, DebtsList2),
-    {reply, DebtLists ++ DebtLists2, State};
+    {reply, get_tot_debts(?DEBTS(State), User), State};
 
 handle_call({get_user_transactions, TUser},  _From, State) ->
     User = ?UID_TO_LOWER(TUser),
@@ -177,6 +172,7 @@ handle_call(_Request, _From, State) ->
 %% TODO Add change of calculated debt
 handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     Users = ?USERS(State),
+    Debts = ?DEBTS(State),
     DebtRecord = ?DEBT_RECORD(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     TOldUser = ?UID_TO_LOWER(TTOldUser),
@@ -203,6 +199,13 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
                                   end
                           end, DebtIds),
 
+    OldDebts = get_tot_debts(Debts, TOldUser),
+    lists:foreach( fun({P1, P2, Amount}) ->
+                           dets:delete(Debts, {P1,P2}),
+                           add_to_earlier_debt(sort_user_debt(undef, P1, P2, undef, undef, Amount), Debts)
+                   end
+                 , OldDebts),
+
     error_logger:info_msg("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
@@ -210,6 +213,8 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
 % but he will have to guess the userid
 % note that these should be not approved debts
 %% REMEMBER to change so that it changes debts as well
+%% but that will not be needed when we add approval transactions
+%% since they will appear as unapproved then. on the other hand we need to remove them from the db
 handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
 %    Debts = ?DEBTS(State),
     Users = ?USERS(State),
@@ -337,3 +342,9 @@ verify_uid(User) ->
         _ -> ok
     end.
 
+get_tot_debts(Debts, User) ->
+    DebtsList = db_w:match(Debts, {{User, '$1'}, '$2'}),
+    DebtsList2 = db_w:match(Debts, {{'$1', User}, '$2'}),
+    DebtLists = lists:map(fun([V1,V2]) -> {User,V1,V2} end, DebtsList),
+    DebtLists2 = lists:map(fun([V1,V2]) -> {V1, User, V2} end, DebtsList2),
+    DebtLists ++ DebtLists2.

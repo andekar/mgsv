@@ -528,6 +528,10 @@ verify_call_change_username_test() ->
     NewUserModified = <<"andersk84@gmail.com">>,
     ok = meck:new(db_w),
     ok = meck:expect( db_w
+                    , match
+                    , fun(_Name, _Pattern) ->
+                              [] end),
+    ok = meck:expect( db_w
                     , lookup
                     , fun(Name, Key) ->
                               case {Name, Key} of
@@ -563,9 +567,9 @@ verify_call_change_username_test() ->
     ?assertEqual(4,meck:num_calls(db_w, lookup, '_')),
     ?assertEqual(2,meck:num_calls(db_w, insert, '_')),
     ?assertEqual(3,meck:num_calls(db_w, delete, '_')),
+    ?assertEqual(2,meck:num_calls(db_w, match, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
-
 
 verify_call_transfer_debts_test() ->
     { [{User1, Username}|_] = _OtherUsers
@@ -575,6 +579,10 @@ verify_call_transfer_debts_test() ->
     NewUser = <<"andersk84@gmail.com">>,
 
     ok = meck:new(db_w),
+    %% ok = meck:expect( db_w
+    %%                 , match
+    %%                 , fun(_Name, _Pattern) ->
+    %%                           [] end),
     ok = meck:expect( db_w
                     , lookup
                     , fun(Name, Key) ->
@@ -611,5 +619,6 @@ verify_call_transfer_debts_test() ->
     ?assertEqual(3,meck:num_calls(db_w, lookup, '_')),
     ?assertEqual(1,meck:num_calls(db_w, insert, '_')),
     ?assertEqual(3,meck:num_calls(db_w, delete, '_')),
+%    ?assertEqual(2,meck:num_calls(db_w, match, '_')),
     true = meck:validate(db_w),
     ok = meck:unload(db_w).
