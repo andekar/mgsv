@@ -15,10 +15,12 @@
          , get_debts/0
          , get_transactions/0
          , get_user_transactions/1
+         , user_not_approved_transactions/1
          , get_user_debt/1
          , change_user/2
          , add_debt/1
          , transfer_debts/2
+         , approve_debt/1
          , get_usernames/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,6 +50,10 @@ add_debt(Message) ->
     error_logger:info_msg("Module: ~p function: add_debts Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
+approve_debt(Message) ->
+    error_logger:info_msg("Module: ~p function: approve_debts Argument: ~p~n", [?MODULE, Message]),
+    gen_server:call(?MODULE, Message).
+
 get_debts() ->
     io:format("Module: ~p function: get_debts~n", [?MODULE]),
     gen_server:call(?MODULE, get_debts).
@@ -59,6 +65,10 @@ get_user_debt(User) ->
 get_user_transactions(User) ->
     io:format("Module: ~p function: get_user_transactions~n", [?MODULE]),
     gen_server:call(?MODULE, {get_user_transactions, User}).
+
+user_not_approved_transactions(User) ->
+    io:format("Module: ~p function: user_not_approved_transactions~n", [?MODULE]),
+    gen_server:call(?MODULE, {user_not_approved_transactions, User}).
 
 get_transactions() ->
     io:format("Module: ~p function: get_transactions~n", [?MODULE]),
@@ -99,6 +109,20 @@ handle_call({get_user_transactions, TUser},  _From, State) ->
                           end, DebtIds),
     {reply, DebtLists, State};
 
+handle_call({user_not_approved_transactions, TUser},  _From, State) ->
+    User = ?UID_TO_LOWER(TUser),
+    DebtRecord = ?DEBT_RECORD(State),
+    error_logger:info_msg("getting user transactions for uuid: ~p~n", [User]),
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
+    error_logger:info_msg("user approval debts: ~p~n", [ApprovalDebt]),
+    DebtIds = not_approved_debts(User, ApprovalDebt),
+    error_logger:info_msg("user not approval debt ids: ~p~n", [DebtIds]),
+    DebtLists = lists:map(fun({Id,_}) ->
+                                  [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
+                                  {Uuid, Uid1, Uid2, Time, Reason, Amount}
+                          end, DebtIds),
+    {reply, DebtLists, State};
+
 handle_call(get_debts, _From, State) ->
     Debts = ?DEBTS(State),
     DebtList = db_w:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
@@ -118,7 +142,7 @@ handle_call(get_transactions, _From, State) ->
 
 handle_call({get_usernames, Uids}, _From, State) ->
     Users = proplists:get_value(?USERS, State),
-    RetUsers = lists:map(fun(TUid) ->
+    RetUsers = lists:map(fun({?UID, TUid}) ->
                       Uid = ?UID_TO_LOWER(TUid),
                       case db_w:lookup(Users, Uid) of
                           [] -> {error, user_not_found};
@@ -128,8 +152,8 @@ handle_call({get_usernames, Uids}, _From, State) ->
               end, Uids),
     {reply, RetUsers, State};
 
-%% Fix bug where a uid1/2 does not contain @
-handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
+% so one of the uids should be equals to ReqBy
+handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     Debts = ?DEBTS(State),
     DebtRecord = ?DEBT_RECORD(State),
     Users = ?USERS(State),
@@ -138,10 +162,11 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
     Reason = proplists:get_value(?REASON, Struct),
     Amount = proplists:get_value(?AMOUNT, Struct),
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
+    ReqBy = ?UID_TO_LOWER(TReqBy),
     %% per user
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
         = lists:map(fun({P, U}) ->
-                    Uid  = ?UID_TO_LOWER(proplists:get_value(U, Struct, binary_uuid())),
+                    Uid  = ?UID_TO_LOWER(verify_uid(proplists:get_value(U, Struct))),
                     PToUse = case db_w:lookup(Users, Uid) of
                                  %% make sure that we never autogenerate username
                                   [] -> [{P, User}] = proplists:lookup_all(P, Struct),
@@ -149,11 +174,18 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
                                         User;
                                   [{_, R}]  -> R
                               end,
-                    update_approved_debts(Uid, ApprovalDebt, [Uuid]),
                     {PToUse, Uid} end,
                             [{?USER1, ?UID1}, {?USER2, ?UID2}]),
-    db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp,  Reason, Amount)),
-    add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
+    %%update_approved_debts(Uid, ApprovalDebt, [Uuid]),
+    %% this goes into unapproved debts if we are not one non existing user
+
+    db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
+    %% this we only do when a debt has been approved!!!
+    %%add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
+    _ = case {verify_uid(Uid1), verify_uid(Uid2)} of
+            {Uid1,Uid2} -> add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid);
+            _       -> add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts)
+        end,
     {reply, [ ?UID1(Uid1)
             , ?USER1(P1ToUse)
             , ?UID2(Uid2)
@@ -164,6 +196,29 @@ handle_call({add, {?JSONSTRUCT, Struct}}, _From, State) ->
             , ?TIMESTAMP(TimeStamp)
             , ?STATUS(<<"ok">>)
             ], State};
+
+handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
+    DebtRecord = ?DEBT_RECORD(State),
+    Debts = ?DEBTS(State),
+    %% get the not approved debt
+    Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
+    ApprovedBy = ?APPROVED_BY(Props),
+    %crash if we are not the one supposed to approve the debt
+    ReqBy = ?NOT_APPROVED_BY(Props),
+    error_logger:info_msg("Approving debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+    % crash if there is no such debt
+    [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Uuid),
+    %For both
+    remove_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
+    remove_not_approved_debt(ApprovedBy, ApprovalDebt, Uuid),
+
+    update_approved_debts(ReqBy, ApprovalDebt, [Uuid]),
+    update_approved_debts(ApprovedBy, ApprovalDebt, [Uuid]),
+
+    %get the debt so that we can update the total debts
+    add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, Time, Reason, Amount), Debts),
+    {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
     io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
@@ -179,7 +234,7 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
-    ok = verify_uid(TNewUser),
+    TNewUser = verify_uid(TNewUser),
 
     [] = db_w:lookup(Users, TNewUser), %% make sure we do not create duplicate users.
     [{TOldUser, Username}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
@@ -231,7 +286,7 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
     % to make sure we transfer only uuid users we check that the id does not contain an @
     0 = string:rstr(binary_to_list(TOldUser), "@"),
 
-    ok = verify_uid(TNewUser),
+    TNewUser = verify_uid(TNewUser),
     ok = db_w:delete(Users, TOldUser),
 
     [{TNewUser, _Username}] = db_w:lookup(Users, TNewUser),%the user must exist already
@@ -330,6 +385,11 @@ approved_debts(Key, Name) ->
     error_logger:info_msg("approved debts: ~p~n", [Props]),
     ?APPROVED_DEBTS(Props).
 
+not_approved_debts(Key, Name) ->
+    [{_, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    error_logger:info_msg("not_approved debts: ~p~n", [Props]),
+    ?NOT_APPROVED_DEBTS(Props).
+
 %% key = uid
 %% Name = table name
 %% Items [items] list of items to insert
@@ -340,11 +400,33 @@ update_approved_debts(Key, Name, Items) ->
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          ?APPROVED_DEBTS(Props) ++ Items)}).
 
+update_not_approved_debts(Key, Name, Items) ->
+    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    ok = db_w:delete(Name, Key),
+    error_logger:info_msg("updating notapproved debts for user ~p : ~p~n", [Key, ?NOT_APPROVED_DEBTS(Props) ++ Items]),
+    ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
+                                         ?NOT_APPROVED_DEBTS(Props) ++ Items)}).
+
+remove_not_approved_debt(Key, Name, Item) ->
+    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    ok = db_w:delete(Name, Key),
+    NewEntry = proplists:delete(Item,?NOT_APPROVED_DEBTS(Props)),
+    error_logger:info_msg("removing notapproved debts: ~p~n", [NewEntry]),
+    ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
+                                         NewEntry)}).
+
+get_not_approved_debt(Key, Name, Item) ->
+    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    NotApproved = ?NOT_APPROVED_DEBTS(Props),
+    proplists:get_value(Item, NotApproved).
+
+verify_uid(undefined) ->
+    binary_uuid();
 verify_uid(User) ->
     ListUser = binary_to_list(User),
     case string:rstr(ListUser, "@") of
         0 -> invalid;
-        _ -> ok
+        _ -> User
     end.
 
 get_tot_debts(Debts, User) ->
@@ -353,3 +435,19 @@ get_tot_debts(Debts, User) ->
     DebtLists = lists:map(fun([V1,V2]) -> {User,V1,V2} end, DebtsList),
     DebtLists2 = lists:map(fun([V1,V2]) -> {V1, User, V2} end, DebtsList2),
     DebtLists ++ DebtLists2.
+
+
+add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, SortedDebt, Debts) ->
+    update_approved_debts(Uid1, ApprovalDebt, [Uuid]),
+    update_approved_debts(Uid2, ApprovalDebt, [Uuid]),
+    add_to_earlier_debt(SortedDebt, Debts).
+
+add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid) ->
+    case Uid1 of
+        ReqBy -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid2}]}],
+                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
+                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd);
+        _     -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid1}]}],
+                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
+                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd)
+    end.

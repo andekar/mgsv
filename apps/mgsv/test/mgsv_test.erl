@@ -362,7 +362,7 @@ verify_call_add_normal_debt_test() ->
                                                             ),
                                                  ok end),
 
-    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    {reply, Result, _} = pay_server:handle_call({add, Uid1, DebtToAdd}, undefined, state()),
     Expected =[ {?UID1, Uid1}
               , {?USER1, User1}
               , {?UID2, Uid2}
@@ -425,7 +425,8 @@ verify_call_add_debt_no_userids_test() ->
     ok = meck:expect(db_w, delete, fun(_,_Val) ->
                                                  ok end),
 
-    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    %% TODO WE SHOULD NOT BE ABLE TO DO THIS
+    {reply, Result, _} = pay_server:handle_call({add, <<"">>, DebtToAdd}, undefined, state()),
     Expected =[ {?USER1, User1}
               , {?USER2, User2}
               , {?REASON, Reason}
@@ -495,7 +496,7 @@ verify_call_add_debt_existing_user_test() ->
                                                             ),
                                                  ok end),
 
-    {reply, Result, _} = pay_server:handle_call({add, DebtToAdd}, undefined, state()),
+    {reply, Result, _} = pay_server:handle_call({add, Uid1, DebtToAdd}, undefined, state()),
     Expected =[ {?UID1, Uid1}
               , {?USER1, RealUser1}
               , {?UID2, Uid2}

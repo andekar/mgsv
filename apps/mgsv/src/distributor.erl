@@ -21,10 +21,11 @@ content_types_accepted(RD, Ctx) ->
 
 from_json(ReqData, Context) ->
     Any = wrq:req_body(ReqData),
-
-    error_logger:info_msg("JSon received ~p~n",[Any]),
+    Url = wrq:path_tokens(ReqData),
+    error_logger:info_msg("JSon received ~p at url ~p~n",[Any, Url]),
     Decoded = mochijson2:decode(Any),
-    {ok, Result} = mgsv_server:send_message(Decoded),
+    error_logger:info_msg("Decoded to ~p~n", [Decoded]),
+    {ok, Result} = mgsv_server:send_message({Url, Decoded}),
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Result)]),
     {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body(Result, ReqData)), Context}.

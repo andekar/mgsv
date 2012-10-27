@@ -2,6 +2,10 @@
 -define(UID, <<"uid">>).
 -define(UID(Uid), {?UID, Uid}).
 
+%% request by
+-define(REQUEST_BY, <<"request_by">>).
+-define(REQUEST_BY(By), {?REQUEST_BY, By}).
+
 %% Uniq uid
 -define(UUID, <<"uuid">>).
 -define(UUID(Uuid), {?UUID, Uuid}).
@@ -68,7 +72,7 @@
 -define(USERS, users).
 -define(USERS(Props), proplists:get_value(?USERS, Props)).
 
-%% {Uuid, [{?APPROVED_DEBTS, [Uids]}, {?NOT_APPROVED_DEBTS, [Uids]}] }
+%% {Uuid, [{?APPROVED_DEBTS, [Uids]}, {?NOT_APPROVED_DEBTS, [{Uid, [{approved_by|not_approved_by, Uid}]}|...]}] }
 %% That is Uuid = userid, Uids = debt_ids
 -define(DEBT_APPROVAL_TRANSACTIONS, debt_approval_transactions).
 -define(DEBT_APPROVAL_TRANSACTIONS(Props), proplists:get_value(?DEBT_APPROVAL_TRANSACTIONS, Props)).
@@ -82,3 +86,9 @@
 
 %% to lower and check @
 -define(UID_TO_LOWER(User), list_to_binary(string:to_lower(binary_to_list(User)))).
+
+-define(APPROVED_BY, approved_by).
+-define(APPROVED_BY(Props), proplists:get_value(?APPROVED_BY, Props)).
+
+-define(NOT_APPROVED_BY, not_approved_by).
+-define(NOT_APPROVED_BY(Props), proplists:get_value(?NOT_APPROVED_BY, Props)).
