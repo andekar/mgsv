@@ -21,6 +21,8 @@ response
 
 [{"uid":"anders@gmail.com","user":"Anders"},{"uid":"jenny@gmail.com","user":"jenny"}]
 
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/transfer_debts -d "[{\"request_by\":\"anders@gmail.com\"},{\"old_uid\":\"01190f79-c0f2-45f9-a2bd-b37d19b85337\"},{\"new_uid\":\"jenny@gmail.com\"}]"
+
 ------ V0.2b
 Requests:
 PUT
