@@ -42,7 +42,7 @@ handle_call({["users"], Uids}, _From, State) ->
     Struct = pay_server:get_usernames(proplists:delete(?REQUEST_BY, RealUids)),
     {reply, {ok, mochijson2:encode(Struct)}, State};
 
-%get users
+%approve debt
 handle_call({["approve_debt"], TStruct}, _From, State) ->
     error_logger:info_msg("Approving debtjson ~n~p~n",[TStruct]),
     %destructify
@@ -51,6 +51,18 @@ handle_call({["approve_debt"], TStruct}, _From, State) ->
     _Reply = lists:map(fun({?UUID, Vars}) ->
                                error_logger:info_msg("approving debt~n~p~n",[Vars]),
                                pay_server:approve_debt({approve_debt, ReqBy, Vars})
+                               end, proplists:delete(?REQUEST_BY, Struct)),
+    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+
+%delete debt
+handle_call({["delete_debt"], TStruct}, _From, State) ->
+    error_logger:info_msg("Approving debtjson ~n~p~n",[TStruct]),
+    %destructify
+    Struct = lists:flatten(destructify_list(TStruct)),
+    [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
+    _Reply = lists:map(fun({?UUID, Vars}) ->
+                               error_logger:info_msg("deleting debt~n~p~n",[Vars]),
+                               pay_server:delete_debt({delete_debt, ReqBy, Vars})
                                end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 

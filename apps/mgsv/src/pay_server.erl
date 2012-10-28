@@ -16,6 +16,7 @@
          , get_transactions/0
          , get_user_transactions/1
          , user_not_approved_transactions/1
+         , delete_debt/1
          , get_user_debt/1
          , change_user/2
          , add_debt/1
@@ -52,6 +53,10 @@ add_debt(Message) ->
 
 approve_debt(Message) ->
     error_logger:info_msg("Module: ~p function: approve_debts Argument: ~p~n", [?MODULE, Message]),
+    gen_server:call(?MODULE, Message).
+
+delete_debt(Message) ->
+    error_logger:info_msg("Module: ~p function: remove debt Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
 get_debts() ->
@@ -218,6 +223,26 @@ handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
 
     %get the debt so that we can update the total debts
     add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, Time, Reason, Amount), Debts),
+    {reply, ok, State};
+
+handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
+    DebtRecord = ?DEBT_RECORD(State),
+    %% get the not approved debt
+    Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
+    ApprovedBy = ?APPROVED_BY(Props),
+    %crash if we are not the one supposed to approve the debt
+    %%ReqBy = ?NOT_APPROVED_BY(Props),
+    ok = case {?NOT_APPROVED_BY(Props), ApprovedBy} of
+             {ReqBy, _} -> ok;
+             {_, ReqBy} -> ok;
+             _          -> failed
+         end,
+    error_logger:info_msg("deleting not approved debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+    db_w:delete(DebtRecord, Uuid),
+    %For both
+    remove_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
+    remove_not_approved_debt(ApprovedBy, ApprovalDebt, Uuid),
     {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
