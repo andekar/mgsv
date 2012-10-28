@@ -1,6 +1,24 @@
 mgsv
 ====
+------ V0.2c changes
 
+-- both of the users can remove the debt
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"61c1e712-6f4c-4deb-8c9c-bb4276d65f07\"}]"
+
+-- this will show the same for both users even if one of them has approved the debt
+curl http://localhost:8000/payapp/not_approved_user_transactions/anders@gmail.com
+[{"debt":{"uuid":"61c1e712-6f4c-4deb-8c9c-bb4276d65f07","uid1":"anders@gmail.com","uid2":"jenny@gmail.com","timestamp":1351371359532248,"reason":"bio","amount":100}}]
+
+-- user constraint, the one approving the debt must be another one than the one who added the debt.
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/approve_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"e4aa232e-97c2-4b30-bc6e-97f65d97dfd8\"}]"
+
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/users -d "[{\"uid\":\"anders@gmail.com\"},{\"uid\":\"jenny_karlsson@live.com\"}]"
+
+response
+
+[{"uid":"anders@gmail.com","user":"Anders"},{"uid":"jenny@gmail.com","user":"jenny"}]
+
+------ V0.2b
 Requests:
 PUT
 
