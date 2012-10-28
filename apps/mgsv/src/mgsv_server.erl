@@ -66,6 +66,18 @@ handle_call({["delete_debt"], TStruct}, _From, State) ->
                                end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
+%delete debt
+handle_call({["transfer_debts"], TStruct}, _From, State) ->
+    error_logger:info_msg("Approving debtjson ~n~p~n",[TStruct]),
+    %destructify
+    Struct = lists:flatten(destructify_list(TStruct)),
+    [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
+    [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Struct),
+    [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Struct),
+    error_logger:info_msg("transfer debt from OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
+    pay_server:transfer_debts(OldUid, NewUid, ReqBy),
+    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+
 handle_call(["users"], _From, State) ->
     Return = lists:map(fun({Uuid, User}) ->
                        ?JSONSTRUCT([?UID(Uuid), ?USER(User)]) end,

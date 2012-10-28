@@ -2,6 +2,10 @@
 -define(UID, <<"uid">>).
 -define(UID(Uid), {?UID, Uid}).
 
+-define(NEW_UID, <<"new_uid">>).
+
+-define(OLD_UID, <<"old_uid">>).
+
 %% request by
 -define(REQUEST_BY, <<"request_by">>).
 -define(REQUEST_BY(By), {?REQUEST_BY, By}).

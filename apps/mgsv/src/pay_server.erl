@@ -20,7 +20,7 @@
          , get_user_debt/1
          , change_user/2
          , add_debt/1
-         , transfer_debts/2
+         , transfer_debts/3
          , approve_debt/1
          , get_usernames/1]).
 
@@ -87,9 +87,9 @@ change_user(OldUser, NewUser) ->
     error_logger:info_msg("Changing username old: ~p new: ~p",[OldUser, NewUser]),
     gen_server:cast(?MODULE, {change_username, OldUser, NewUser}).
 
-transfer_debts(OldUser, NewUser) ->
+transfer_debts(OldUser, NewUser, ReqBy) ->
     error_logger:info_msg("Transferring debts from ~p to ~p~n", [OldUser, NewUser]),
-    gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser}).
+    gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
 
 %% callbacks
 handle_call(get_users, _From, State) ->
@@ -171,7 +171,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     %% per user
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
         = lists:map(fun({P, U}) ->
-                    Uid  = ?UID_TO_LOWER(verify_uid(proplists:get_value(U, Struct))),
+                    Uid  = ?UID_TO_LOWER(verify_uid(proplists:get_value(U, Struct), Users)),
                     PToUse = case db_w:lookup(Users, Uid) of
                                  %% make sure that we never autogenerate username
                                   [] -> [{P, User}] = proplists:lookup_all(P, Struct),
@@ -187,7 +187,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     %% this we only do when a debt has been approved!!!
     %%add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
-    _ = case {verify_uid(Uid1), verify_uid(Uid2)} of
+    _ = case {contains_at(Uid1), contains_at(Uid2)} of
             {Uid1,Uid2} -> add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid);
             _       -> add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts)
         end,
@@ -259,7 +259,7 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
-    TNewUser = verify_uid(TNewUser),
+    TNewUser = verify_uid(TNewUser, Users),
 
     [] = db_w:lookup(Users, TNewUser), %% make sure we do not create duplicate users.
     [{TOldUser, Username}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
@@ -294,14 +294,9 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     error_logger:info_msg("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
-% take care, any one might transfer debts to another person
-% but he will have to guess the userid
-% note that these should be not approved debts
-%% REMEMBER to change so that it changes debts as well
-%% but that will not be needed when we add approval transactions
-%% since they will appear as unapproved then. on the other hand we need to remove them from the db
-handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
-%    Debts = ?DEBTS(State),
+% The user transferring debts must be the creator (ReqBy)
+handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
+    Debts = ?DEBTS(State),
     Users = ?USERS(State),
     DebtRecord = ?DEBT_RECORD(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
@@ -311,11 +306,22 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
     % to make sure we transfer only uuid users we check that the id does not contain an @
     0 = string:rstr(binary_to_list(TOldUser), "@"),
 
-    TNewUser = verify_uid(TNewUser),
+    % we should only get one old debt since these are supposed to be per user.
+    [{P1, P2, _V}] = get_tot_debts(Debts, TOldUser),
+
+    %% Check that ReqBy is one of the users
+    true = P1 == ReqBy orelse P2 == ReqBy,
+
+    %the user must exist already
+    [{TNewUser, _Username}] = db_w:lookup(Users, TNewUser),
+
+    % delete the debt
+    db_w:delete(Debts, {P1, P2}),
+
+    TNewUser = verify_uid(TNewUser, Users),
     ok = db_w:delete(Users, TOldUser),
 
-    [{TNewUser, _Username}] = db_w:lookup(Users, TNewUser),%the user must exist already
-
+    % all debts are approved
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
     ok = db_w:delete(ApprovalDebt, TOldUser),
@@ -324,8 +330,10 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser}, State) ->
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   ok = db_w:delete(DebtRecord, Id),
                                   case Uid1 of
-                                      TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount));
-                                      _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount))
+                                      TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
+                                                  add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
+                                      _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
+                                                  add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
                                   end
                           end, DebtIds),
 
@@ -445,9 +453,21 @@ get_not_approved_debt(Key, Name, Item) ->
     NotApproved = ?NOT_APPROVED_DEBTS(Props),
     proplists:get_value(Item, NotApproved).
 
-verify_uid(undefined) ->
+% we might need to create a valid uid here,
+% or if the uid already exist then we are fine
+% or if the uid contains @
+verify_uid(undefined, _Db) ->
     binary_uuid();
-verify_uid(User) ->
+verify_uid(User, Db) ->
+    case contains_at(User) of
+        invalid -> case db_w:lookup(Db, User) of
+                 [] -> invalid;
+                 _ -> User
+             end;
+        _ -> User
+    end.
+
+contains_at(User) ->
     ListUser = binary_to_list(User),
     case string:rstr(ListUser, "@") of
         0 -> invalid;
