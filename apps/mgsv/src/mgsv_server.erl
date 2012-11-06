@@ -29,6 +29,7 @@ handle_call({[], TStruct}, _From, State) ->
     Struct = lists:flatten(destructify_list(TStruct)),
     [{_, ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     Reply = lists:map(fun({?DEBT, Vars}) ->
+                              lager:log(info, ?MODULE, "Adding debt ~n~p~n", [Vars]),
                                error_logger:info_msg("Adding debt~n~p~n",[Vars]),
                                Tmp = pay_server:add_debt({add,ReqBy, Vars}),
                                ?JSONSTRUCT([{?DEBT,Tmp}])
