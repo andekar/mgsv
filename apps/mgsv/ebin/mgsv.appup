@@ -2,6 +2,9 @@
 {"0.2c", [{"0.2b", [
                   {load_module, db_w},
                   {update, distributor},
+                  {update, mgsv_sup, supervisor},
+                  {load_module, mgsv_lager_sup},
+                  {apply, {supervisor, restart_child, [mgsv_sup, mgsv_lager_sup]}},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
                   {update, mgsv_server,{advanced, "0.2b"}},
                   {update, pay_server, {advanced, "0.2b"}},

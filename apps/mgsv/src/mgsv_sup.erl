@@ -24,8 +24,9 @@ start_link() ->
 
 
 init([]) ->
+    Lager = ?CHILD(mgsv_lager_sup, supervisor),
     MgsvServer = ?CHILD(mgsv_server, worker),
     WebMachine = ?CHILD(machine_sup, supervisor),
     PayServer = ?CHILD(pay_server, worker),
-    Processes = [WebMachine, MgsvServer, PayServer],
-    {ok, { {one_for_one, 10, 10}, Processes} }.
+    Processes = [Lager, WebMachine, MgsvServer, PayServer],
+    {ok, { {one_for_one, 6000, 1}, Processes} }.

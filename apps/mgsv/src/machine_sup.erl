@@ -40,4 +40,4 @@ init([]) ->
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, [mochiweb_socket_server]},
     Processes = [Web],
-    {ok, { {one_for_one, 10, 10}, Processes} }.
+    {ok, { {one_for_one, 6000, 1}, Processes} }.
