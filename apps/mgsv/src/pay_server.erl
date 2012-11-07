@@ -40,55 +40,42 @@ init([]) ->
     {ok, [{?DEBTS,A}, {?USERS, B}, {?DEBT_RECORD, C}, {?DEBT_APPROVAL_TRANSACTIONS, D}]}.
 
 call_pay(Message) ->
-    io:format("Module: ~p function: call_pay Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
 cast_pay(Message) ->
-    io:format("Module: ~p function: cast_pay Argument: ~p~n", [?MODULE, Message]),
     gen_server:cast(?MODULE, Message).
 
 add_debt(Message) ->
-    error_logger:info_msg("Module: ~p function: add_debts Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
 approve_debt(Message) ->
-    error_logger:info_msg("Module: ~p function: approve_debts Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
 delete_debt(Message) ->
-    error_logger:info_msg("Module: ~p function: remove debt Argument: ~p~n", [?MODULE, Message]),
     gen_server:call(?MODULE, Message).
 
 get_debts() ->
-    io:format("Module: ~p function: get_debts~n", [?MODULE]),
     gen_server:call(?MODULE, get_debts).
 
 get_user_debt(User) ->
-    io:format("Module: ~p function: get_user_debt~n", [?MODULE]),
     gen_server:call(?MODULE, {get_user_debt, User}).
 
 get_user_transactions(User) ->
-    io:format("Module: ~p function: get_user_transactions~n", [?MODULE]),
     gen_server:call(?MODULE, {get_user_transactions, User}).
 
 user_not_approved_transactions(User) ->
-    io:format("Module: ~p function: user_not_approved_transactions~n", [?MODULE]),
     gen_server:call(?MODULE, {user_not_approved_transactions, User}).
 
 get_transactions() ->
-    io:format("Module: ~p function: get_transactions~n", [?MODULE]),
     gen_server:call(?MODULE, get_transactions).
 
 get_usernames(Uids) ->
-    error_logger:info_msg("Get usernames ~p",[Uids]),
     gen_server:call(?MODULE, {get_usernames, Uids}).
 
 change_user(OldUser, NewUser) ->
-    error_logger:info_msg("Changing username old: ~p new: ~p",[OldUser, NewUser]),
     gen_server:cast(?MODULE, {change_username, OldUser, NewUser}).
 
 transfer_debts(OldUser, NewUser, ReqBy) ->
-    error_logger:info_msg("Transferring debts from ~p to ~p~n", [OldUser, NewUser]),
     gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
 
 %% callbacks
@@ -103,11 +90,8 @@ handle_call({get_user_debt, User},  _From, State) ->
 handle_call({get_user_transactions, TUser},  _From, State) ->
     User = ?UID_TO_LOWER(TUser),
     DebtRecord = ?DEBT_RECORD(State),
-    error_logger:info_msg("getting user transactions for uuid: ~p~n", [User]),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-    error_logger:info_msg("user approval debts: ~p~n", [ApprovalDebt]),
     DebtIds = approved_debts(User, ApprovalDebt),
-    error_logger:info_msg("user approval debt ids: ~p~n", [DebtIds]),
     DebtLists = lists:map(fun(Id) ->
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   {Uuid, Uid1, Uid2, Time, Reason, Amount}
@@ -117,12 +101,10 @@ handle_call({get_user_transactions, TUser},  _From, State) ->
 handle_call({user_not_approved_transactions, TUser},  _From, State) ->
     User = ?UID_TO_LOWER(TUser),
     DebtRecord = ?DEBT_RECORD(State),
-    error_logger:info_msg("getting user transactions for uuid: ~p~n", [User]),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-    error_logger:info_msg("user approval debts: ~p~n", [ApprovalDebt]),
     DebtIds = not_approved_debts(User, ApprovalDebt),
-    error_logger:info_msg("user not approval debt ids: ~p~n", [DebtIds]),
-    DebtLists = lists:map(fun({Id,_}) ->
+    DebtLists = lists:map(fun({Id,_MaybeApprovedBy}) ->
+                                  %ApprovedBy = ?APPROVED_BY(MaybeApprovedBy),
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   {Uuid, Uid1, Uid2, Time, Reason, Amount}
                           end, DebtIds),
@@ -183,7 +165,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
                             [{?USER1, ?UID1}, {?USER2, ?UID2}]),
     %%update_approved_debts(Uid, ApprovalDebt, [Uuid]),
     %% this goes into unapproved debts if we are not one non existing user
-
+    lager:debug("Inserting Debt: ~p", sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     %% this we only do when a debt has been approved!!!
     %%add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
@@ -211,7 +193,7 @@ handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
     ApprovedBy = ?APPROVED_BY(Props),
     %crash if we are not the one supposed to approve the debt
     ReqBy = ?NOT_APPROVED_BY(Props),
-    error_logger:info_msg("Approving debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+
     % crash if there is no such debt
     [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Uuid),
     %For both
@@ -223,6 +205,8 @@ handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
 
     %get the debt so that we can update the total debts
     add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, Time, Reason, Amount), Debts),
+
+    lager:info("Approving debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
     {reply, ok, State};
 
 handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
@@ -238,15 +222,16 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
              {_, ReqBy} -> ok;
              _          -> failed
          end,
-    error_logger:info_msg("deleting not approved debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+
     db_w:delete(DebtRecord, Uuid),
     %For both
     remove_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
     remove_not_approved_debt(ApprovedBy, ApprovalDebt, Uuid),
+    lager:info("deleting not approved debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
     {reply, ok, State};
 
-handle_call(_Request, _From, State) ->
-    io:format("Module: ~p function: handle_call~nState~p~n", [?MODULE, State]),
+handle_call(Request, _From, State) ->
+    lager:alert("Handle unknown call ~p", Request),
     {reply, ok, State}.
 
 %% notice how any one can change their username if we add this to calls
@@ -270,7 +255,7 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
     ok = db_w:delete(ApprovalDebt, TOldUser),
-    error_logger:info_msg("user approval debt ids: ~p~n", [DebtIds]),
+
     _DebtLists = lists:map(fun(Id) ->
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   ok = db_w:delete(DebtRecord, Id),
@@ -291,7 +276,7 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
                    end
                  , OldDebts),
 
-    error_logger:info_msg("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
+    lager:info("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
 % The user transferring debts must be the creator (ReqBy)
@@ -325,7 +310,6 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
     ok = db_w:delete(ApprovalDebt, TOldUser),
-    error_logger:info_msg("user approval debt ids: ~p~n", [DebtIds]),
     _DebtLists = lists:map(fun(Id) ->
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
                                   ok = db_w:delete(DebtRecord, Id),
@@ -337,16 +321,19 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                                   end
                           end, DebtIds),
 
-    error_logger:info_msg("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
+    lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
-handle_cast(_Msg, State) ->
+handle_cast(Msg, State) ->
+    lager:alert("Handle unknown cast ~p", Msg),
     {noreply, State}.
 
-handle_info(_Info, State) ->
+handle_info(Msg, State) ->
+    lager:alert("Handle unknown info ~p", Msg),
     {noreply, State}.
 
-terminate(_Reason, State) ->
+terminate(Reason, State) ->
+    lager:emergency("TERMINATING ~p", Reason),
     Debts = ?DEBTS(State),
     Users = ?USERS(State),
     DebtRecord = ?DEBT_RECORD(State),
@@ -359,7 +346,7 @@ terminate(_Reason, State) ->
 %% add transferral of debts
 %% add event groups
 code_change(OldVsn, State=#state{?DEBTS=Debts, ?USERS=Users, ?DEBT_RECORD=DebtRecord}, "0.2b") ->
-    error_logger:info_msg("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2b"]),
+    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2b"]),
     {_,NewApprovalTransactions} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
     db_w:traverse(DebtRecord, fun({Uuid, {P1, P2}, _TimeStamp, _Reason, _Amount}) ->
                  [{P1, DSet1}] = lookup_dets(NewApprovalTransactions, P1, [{P1, []}]),
@@ -368,7 +355,6 @@ code_change(OldVsn, State=#state{?DEBTS=Debts, ?USERS=Users, ?DEBT_RECORD=DebtRe
                  D2 = proplists:get_value(?APPROVED_DEBTS, DSet2, []),
                  DSet11 = replace_prop(?APPROVED_DEBTS, DSet1, [Uuid | lists:delete(Uuid, D1)]),
                  DSet22 = replace_prop(?APPROVED_DEBTS, DSet2, [Uuid | lists:delete(Uuid, D2)]),
-                 error_logger:info_msg("INSERTING to table approvaltransactions ~p for ~p : ~p and ~p : ~p",[Uuid, P1, DSet11, P2, DSet22]),
                  db_w:insert(NewApprovalTransactions, {P1, DSet11}),
                  db_w:insert(NewApprovalTransactions, {P2, DSet22}),
                  continue end),
@@ -380,7 +366,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 sort_user_debt(Uuid, P1, P2, TimeStamp, Reason, Amount) ->
-     error_logger:info_msg("Adding debt: ~p, ~p, ~p, ~p, ~p, ~p ~n", [Uuid, P1, P2, TimeStamp, Reason, Amount]),
      case P1 < P2 of
           true -> {Uuid, {P1,P2}, TimeStamp, Reason, Amount};
           _ -> {Uuid, {P2,P1}, TimeStamp, Reason, (-1) * Amount}
@@ -388,17 +373,17 @@ sort_user_debt(Uuid, P1, P2, TimeStamp, Reason, Amount) ->
 
 %%Fix to be safe
 add_to_earlier_debt({_Uuid, Key, _TimeStamp, _Reason, Amount}, Db) ->
-      case db_w:lookup(Db, Key) of
-           [] -> db_w:insert(Db, {Key, Amount});
-           [{_,Amount2}] -> db_w:insert(Db, {Key, Amount + Amount2})
-      end.
+    lager:info("Adding to earlier debt ~p Amount ~p", [Key, Amount]),
+    case db_w:lookup(Db, Key) of
+        [] -> db_w:insert(Db, {Key, Amount});
+        [{_,Amount2}] -> db_w:insert(Db, {Key, Amount + Amount2})
+    end.
 
 uuid_to_binary(Uuid) ->
      list_to_binary(uuid:to_string(Uuid)).
 
 binary_uuid() ->
     ossp_uuid:make(v4, text).
-%     list_to_binary(uuid:to_string(uuid:v4())).
 
 get_timestamp() ->
     {Mega, Seconds, Milli} = erlang:now(),
@@ -415,12 +400,10 @@ replace_prop(Key, List, Value) ->
 
 approved_debts(Key, Name) ->
     [{_, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    error_logger:info_msg("approved debts: ~p~n", [Props]),
     ?APPROVED_DEBTS(Props).
 
 not_approved_debts(Key, Name) ->
     [{_, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    error_logger:info_msg("not_approved debts: ~p~n", [Props]),
     ?NOT_APPROVED_DEBTS(Props).
 
 %% key = uid
@@ -429,14 +412,14 @@ not_approved_debts(Key, Name) ->
 update_approved_debts(Key, Name, Items) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
-    error_logger:info_msg("updating approved debts: ~p~n", [?APPROVED_DEBTS(Props) ++ Items]),
+    lager:info("updating approved debts: ~p~n", [?APPROVED_DEBTS(Props) ++ Items]),
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          ?APPROVED_DEBTS(Props) ++ Items)}).
 
 update_not_approved_debts(Key, Name, Items) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
-    error_logger:info_msg("updating notapproved debts for user ~p : ~p~n", [Key, ?NOT_APPROVED_DEBTS(Props) ++ Items]),
+    lager:info("updating notapproved debts for user ~p : ~p~n", [Key, ?NOT_APPROVED_DEBTS(Props) ++ Items]),
     ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
                                          ?NOT_APPROVED_DEBTS(Props) ++ Items)}).
 
@@ -444,7 +427,7 @@ remove_not_approved_debt(Key, Name, Item) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
     NewEntry = proplists:delete(Item,?NOT_APPROVED_DEBTS(Props)),
-    error_logger:info_msg("removing notapproved debts: ~p~n", [NewEntry]),
+    lager:info("removing notapproved debts: ~p~n", [NewEntry]),
     ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
                                          NewEntry)}).
 
@@ -468,6 +451,7 @@ verify_uid(User, Db) ->
     end.
 
 contains_at(User) ->
+    lager:error("here"),
     ListUser = binary_to_list(User),
     case string:rstr(ListUser, "@") of
         0 -> invalid;
