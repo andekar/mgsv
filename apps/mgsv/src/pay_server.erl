@@ -103,10 +103,10 @@ handle_call({user_not_approved_transactions, TUser},  _From, State) ->
     DebtRecord = ?DEBT_RECORD(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtIds = not_approved_debts(User, ApprovalDebt),
-    DebtLists = lists:map(fun({Id,_MaybeApprovedBy}) ->
-                                  %ApprovedBy = ?APPROVED_BY(MaybeApprovedBy),
+    DebtLists = lists:map(fun({Id,MaybeApprovedBy}) ->
+                                  ApprovedBy = ?APPROVED_BY(MaybeApprovedBy),
                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
-                                  {Uuid, Uid1, Uid2, Time, Reason, Amount}
+                                  {Uuid, Uid1, Uid2, Time, Reason, Amount, ApprovedBy}
                           end, DebtIds),
     {reply, DebtLists, State};
 

@@ -113,13 +113,14 @@ handle_call(["user_transactions", User], _From, State) ->
     {reply, {ok, Return2}, State};
 
 handle_call(["not_approved_user_transactions", User], _From, State) ->
-    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
+    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount, ApprovedBy}) ->
                            ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
                                               , ?UID1(P1)
                                               , ?UID2(P2)
                                               , ?TIMESTAMP(TimeStamp)
                                               , ?REASON(Reason)
                                               , ?AMOUNT(Amount)
+                                              , {approved_by, ApprovedBy}
                                                               ])]) end,
                                                      pay_server:user_not_approved_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
