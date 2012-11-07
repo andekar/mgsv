@@ -16,25 +16,23 @@ content_types_provided(ReqData, Context) ->
     {[{"text/html", to_html}], ReqData, Context}.
 
 content_types_accepted(RD, Ctx) ->
-    error_logger:info_msg("Content types~n"),
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
 from_json(ReqData, Context) ->
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
-    error_logger:info_msg("JSon received ~p at url ~p~n",[Any, Url]),
+    error_logger:info_msg("JSon received ~p at url ~p",[Any, Url]),
     Decoded = mochijson2:decode(Any),
-    error_logger:info_msg("Decoded to ~p~n", [Decoded]),
+    error_logger:info_msg("Decoded to ~p", [Decoded]),
     {ok, Result} = mgsv_server:send_message({Url, Decoded}),
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Result)]),
     {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body(Result, ReqData)), Context}.
 
 to_html(ReqData, Context) ->
-    error_logger:info_msg("to_html~n",[]),
     {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
          Any ->
-                    error_logger:info_msg("Get request received~n~p~n",[Any]),
+                    error_logger:info_msg("Get request received ~p",[Any]),
                     {ok, Result} = mgsv_server:send_message(Any),
                     {Result, ReqData, Context}
         end,

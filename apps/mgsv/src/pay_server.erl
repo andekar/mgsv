@@ -412,14 +412,14 @@ not_approved_debts(Key, Name) ->
 update_approved_debts(Key, Name, Items) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
-    lager:info("updating approved debts: ~p~n", [?APPROVED_DEBTS(Props) ++ Items]),
+    lager:info("updating approved debts for ~p with ~p", [Key, Items]),
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          ?APPROVED_DEBTS(Props) ++ Items)}).
 
 update_not_approved_debts(Key, Name, Items) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
-    lager:info("updating notapproved debts for user ~p : ~p~n", [Key, ?NOT_APPROVED_DEBTS(Props) ++ Items]),
+    lager:info("updating notapproved debts for ~p with ~p", [Key, Items]),
     ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
                                          ?NOT_APPROVED_DEBTS(Props) ++ Items)}).
 
@@ -451,7 +451,6 @@ verify_uid(User, Db) ->
     end.
 
 contains_at(User) ->
-    lager:error("here"),
     ListUser = binary_to_list(User),
     case string:rstr(ListUser, "@") of
         0 -> invalid;
