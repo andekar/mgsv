@@ -157,7 +157,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     %% per user
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
         = lists:map(fun({P, U}) ->
-                    Uid  = verify_uid(?UID_TO_LOWER(proplists:get_value(U, Struct)), Users),
+                    Uid  = verify_uid(uid_to_lower(proplists:get_value(U, Struct)), Users),
                     PToUse = case db_w:lookup(Users, Uid) of
                                  %% make sure that we never autogenerate username
                                   [] -> [{P, User}] = proplists:lookup_all(P, Struct),
@@ -494,3 +494,11 @@ add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid) ->
                  update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
                  update_not_approved_debts(Uid2, ApprovalDebt, ToAdd)
     end.
+
+uid_to_lower(undefined) ->
+    undefined;
+uid_to_lower(BinString) when is_binary(BinString) ->
+    list_to_binary(string:to_lower(binary_to_list(BinString)));
+uid_to_lower(Arg) ->
+    lager:error("not valid String ~p", [Arg]).
+
