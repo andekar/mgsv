@@ -51,6 +51,17 @@ handle_call({["approve_debt"], TStruct}, _From, State) ->
                                end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
+%register user
+handle_call({["register"], TStruct}, _From, State) ->
+    %destructify
+    Struct = lists:flatten(destructify_list(TStruct)),
+    [{_, Uid}] = proplists:lookup_all(?UID, Struct),
+    [{_, Name}] = proplists:lookup_all(<<"name">>, Struct),
+    lager:info("Registering user ~p with uid ~p", [Name, Uid]),
+    pay_server:register_user(Name, Uid),
+    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+
+
 %delete debt
 handle_call({["delete_debt"], TStruct}, _From, State) ->
     %destructify

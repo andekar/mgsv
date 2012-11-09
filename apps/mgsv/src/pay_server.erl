@@ -17,6 +17,7 @@
          , get_user_transactions/1
          , user_not_approved_transactions/1
          , delete_debt/1
+         , register_user/2
          , get_user_debt/1
          , change_user/2
          , add_debt/1
@@ -44,6 +45,9 @@ call_pay(Message) ->
 
 cast_pay(Message) ->
     gen_server:cast(?MODULE, Message).
+
+register_user(Name, Uid) ->
+    gen_server:cast(?MODULE, {register, Name, Uid}).
 
 add_debt(Message) ->
     gen_server:call(?MODULE, Message).
@@ -153,7 +157,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     %% per user
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
         = lists:map(fun({P, U}) ->
-                    Uid  = ?UID_TO_LOWER(verify_uid(proplists:get_value(U, Struct), Users)),
+                    Uid  = verify_uid(?UID_TO_LOWER(proplists:get_value(U, Struct)), Users),
                     PToUse = case db_w:lookup(Users, Uid) of
                                  %% make sure that we never autogenerate username
                                   [] -> [{P, User}] = proplists:lookup_all(P, Struct),
@@ -233,6 +237,17 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", Request),
     {reply, ok, State}.
+
+handle_cast({register, Name, Uid}, State) ->
+    Users = ?USERS(State),
+    UidLower  = verify_uid(?UID_TO_LOWER(Uid), Users),
+    case db_w:lookup(Users, UidLower) of
+        %% make sure that we never autogenerate username
+        [] -> db_w:insert(Users, {UidLower, Name}),
+              lager:info("Added user with uid ~p and username ~p", [UidLower, Name]);
+        _  -> lager:info("User already exist")
+    end,
+    {noreply, State};
 
 %% notice how any one can change their username if we add this to calls
 %% TODO Add change of calculated debt
@@ -333,7 +348,7 @@ handle_info(Msg, State) ->
     {noreply, State}.
 
 terminate(Reason, State) ->
-    lager:emergency("TERMINATING ~p", Reason),
+    lager:emergency("TERMINATING ~p", [Reason]),
     Debts = ?DEBTS(State),
     Users = ?USERS(State),
     DebtRecord = ?DEBT_RECORD(State),
