@@ -1,10 +1,17 @@
 mgsv
 ====
+------ V0.2d changes
+removed request /payapp/users
+
+
 ------ V0.2c changes
 
 -- both of the users can remove the debt
 
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"61c1e712-6f4c-4deb-8c9c-bb4276d65f07\"}]"
+
+-- register users
+curl -X PUT -H "Content-type: application/json" http://iamanders.se:6789/payapp/register -d "[{\"uid\":\"robert.f@gmail.com\"},{\"name\":\"Robert\"}]"
 
 -- this will show the same for both users even if one of them has approved the debt
 
