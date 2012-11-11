@@ -28,8 +28,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
 
--record(state, {?DEBTS, ?USERS, ?DEBT_RECORD}).
-
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -360,21 +358,9 @@ terminate(Reason, State) ->
 %% add approval of debts
 %% add transferral of debts
 %% add event groups
-code_change(OldVsn, State=#state{?DEBTS=Debts, ?USERS=Users, ?DEBT_RECORD=DebtRecord}, "0.2b") ->
+code_change(OldVsn, State, "0.2c") ->
     lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2b"]),
-    {_,NewApprovalTransactions} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
-    db_w:traverse(DebtRecord, fun({Uuid, {P1, P2}, _TimeStamp, _Reason, _Amount}) ->
-                 [{P1, DSet1}] = lookup_dets(NewApprovalTransactions, P1, [{P1, []}]),
-                 [{P2, DSet2}] = lookup_dets(NewApprovalTransactions, P2, [{P2, []}]),
-                 D1 = proplists:get_value(?APPROVED_DEBTS, DSet1, []),
-                 D2 = proplists:get_value(?APPROVED_DEBTS, DSet2, []),
-                 DSet11 = replace_prop(?APPROVED_DEBTS, DSet1, [Uuid | lists:delete(Uuid, D1)]),
-                 DSet22 = replace_prop(?APPROVED_DEBTS, DSet2, [Uuid | lists:delete(Uuid, D2)]),
-                 db_w:insert(NewApprovalTransactions, {P1, DSet11}),
-                 db_w:insert(NewApprovalTransactions, {P2, DSet22}),
-                 continue end),
-    %[{approved, [DEBTS]}, {unapproved, [DEBTS]}]
-    {ok, [{?DEBTS, Debts}, {?USERS, Users}, {?DEBT_RECORD, DebtRecord}, {?DEBT_APPROVAL_TRANSACTIONS, NewApprovalTransactions}]}; %%#state{?DEBTS=Debts, ?USERS=Users, ?DEBT_RECORD=NewDebtRecord}};
+    {ok, State};
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
