@@ -216,7 +216,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     DebtRecord = ?DEBT_RECORD(State),
     %% get the not approved debt
     Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
-    ApprovedBy = ?APPROVED_BY(Props),
+    ApprovedBy = uid_to_lower(?APPROVED_BY(Props)),
     %crash if we are not the one supposed to approve the debt
     %%ReqBy = ?NOT_APPROVED_BY(Props),
     ok = case {?NOT_APPROVED_BY(Props), ApprovedBy} of
@@ -224,11 +224,13 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
              {_, ReqBy} -> ok;
              _          -> failed
          end,
+    % crash if there is no such debt
+    [{Uuid, {Uid1, Uid2}, _Time, _Reason, _Amount}] = db_w:lookup(DebtRecord, Uuid),
 
     db_w:delete(DebtRecord, Uuid),
-    %For both
-    remove_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
-    remove_not_approved_debt(ApprovedBy, ApprovalDebt, Uuid),
+    %For both which is wrong
+    remove_not_approved_debt(Uid1, ApprovalDebt, Uuid),
+    remove_not_approved_debt(Uid2, ApprovalDebt, Uuid),
     lager:info("deleting not approved debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
     {reply, ok, State};
 

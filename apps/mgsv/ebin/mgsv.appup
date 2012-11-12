@@ -3,6 +3,7 @@
                   {load_module, db_w},
                   {update, distributor},
                   {update, mgsv_sup, supervisor},
+                  {update, machine_sup, supervisor},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
                   {update, mgsv_server,{advanced, "0.2c"}},
                   {update, pay_server, {advanced, "0.2c"}},

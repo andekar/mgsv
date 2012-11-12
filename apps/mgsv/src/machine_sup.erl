@@ -31,13 +31,27 @@ init([]) ->
     Ip = case os:getenv("WEBMACHINE_IP") of false -> "0.0.0.0"; Any -> Any end,
     {ok, Dispatch} = file:consult(filename:join(
                          ["..","..", "priv", "dispatch.conf"])),
-    WebConfig = [
+    WebConfigSSL = [{name, one},
+                 {ip, Ip},
+                 {port, 8000},
+                 {log_dir, "priv/log"},
+                 {ssl, true},
+                 {ssl_opts, [{certfile, "priv/server.crt"},
+                             {cacertfile,"priv/server.csr"},
+                             {keyfile, "priv/server.key"}]},
+                 {dispatch, Dispatch}],
+
+    WebSSL = {one,
+           {webmachine_mochiweb, start, [WebConfigSSL]},
+           permanent, 5000, worker, [mochiweb_socket_server]},
+    WebConfig = [{name, two},
                  {ip, Ip},
                  {port, 8000},
                  {log_dir, "priv/log"},
                  {dispatch, Dispatch}],
-    Web = {webmachine_mochiweb,
+
+    Web = {two,
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, [mochiweb_socket_server]},
-    Processes = [Web],
+    Processes = [Web, WebSSL],
     {ok, { {one_for_one, 6000, 1}, Processes} }.
