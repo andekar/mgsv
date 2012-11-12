@@ -36,12 +36,15 @@ init([]) ->
                  {port, 8000},
                  {log_dir, "priv/log"},
                  {ssl, true},
-                 {ssl_opts, [{certfile, "priv/server.crt"},
-                             {cacertfile,"priv/server.csr"},
-                             {keyfile, "priv/server.key"}]},
+                    {ssl_opts, [
+                {certfile, "priv/server_cert.pem"},
+                {keyfile, "priv/server_key.pem"}]},
+%                 {ssl_opts, [{certfile, "priv/server.crt"},
+%                             {cacertfile,"priv/server.csr"},
+%                             {keyfile, "priv/server.key"}]},
                  {dispatch, Dispatch}],
 
-    WebSSL = {one,
+    _WebSSL = {one,
            {webmachine_mochiweb, start, [WebConfigSSL]},
            permanent, 5000, worker, [mochiweb_socket_server]},
     WebConfig = [{name, two},
@@ -53,5 +56,5 @@ init([]) ->
     Web = {two,
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, [mochiweb_socket_server]},
-    Processes = [Web, WebSSL],
+    Processes = [Web],
     {ok, { {one_for_one, 6000, 1}, Processes} }.
