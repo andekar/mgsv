@@ -23,6 +23,8 @@
          , add_debt/1
          , transfer_debts/3
          , approve_debt/1
+         , user_exist/1
+         , user_exist/2
          , get_usernames/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -46,6 +48,9 @@ cast_pay(Message) ->
 
 register_user(Name, Uid) ->
     gen_server:cast(?MODULE, {register, Name, Uid}).
+
+user_exist(Uid) ->
+    gen_server:call(?MODULE, {user_exist, Uid}).
 
 add_debt(Message) ->
     gen_server:call(?MODULE, Message).
@@ -117,6 +122,9 @@ handle_call(get_debts, _From, State) ->
     DebtList = db_w:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
     {reply, DebtList, State};
 
+handle_call({user_exists, Uid}, _From, State) ->
+    {reply, user_exist(Uid, State), State};
+
 handle_call(get_transactions, _From, State) ->
     Transactions = proplists:get_value(?DEBT_RECORD, State),
     DebtList = db_w:foldl(fun({Uuid, {Uuid1,Uuid2}, TimeStamp, Reason, Amount}, Acc) ->
@@ -134,7 +142,7 @@ handle_call({get_usernames, Uids}, _From, State) ->
     RetUsers = lists:map(fun({?UID, TUid}) ->
                       Uid = ?UID_TO_LOWER(TUid),
                       case db_w:lookup(Users, Uid) of
-                          [] -> {error, user_not_found};
+                          [] -> [{error, user_not_found}];
                           [{Uid, Username}] ->
                               ?JSONSTRUCT([?UID(Uid), ?USER(Username)])
                       end
@@ -490,3 +498,11 @@ uid_to_lower(BinString) when is_binary(BinString) ->
 uid_to_lower(Arg) ->
     lager:error("not valid String ~p", [Arg]).
 
+
+user_exist(Uid, State) ->
+    Users = ?USERS(State),
+    UidLower  = ?UID_TO_LOWER(Uid),
+    case db_w:lookup(Users, UidLower) of
+        [] -> false;
+        _  -> true
+    end.
