@@ -25,7 +25,8 @@
          , approve_debt/1
          , user_exist/1
          , user_exist/2
-         , get_usernames/1]).
+         , get_usernames/1
+         , check_allowed_to_add/4]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
@@ -173,16 +174,26 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
                               end,
                     {PToUse, Uid} end,
                             [{?USER1, ?UID1}, {?USER2, ?UID2}]),
+    % one of them must be the requester
+    ok = case ReqBy of
+             P1ToUse -> ok;
+             P2ToUse -> ok;
+             _ -> error_requester_not_part_of_debt
+         end,
+
+    _ = case {contains_at(Uid1), contains_at(Uid2)} of
+            {Uid1,Uid2} -> add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid);
+            _       -> %% we need to make sure that ReqBy is the one allowed to add debt to this user
+                ok = check_allowed_to_add(ReqBy, Uid1, Uid2, Debts),
+                add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts)
+        end,
+
     %%update_approved_debts(Uid, ApprovalDebt, [Uuid]),
     %% this goes into unapproved debts if we are not one non existing user
     lager:debug("Inserting Debt: ~p", sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     %% this we only do when a debt has been approved!!!
     %%add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
-    _ = case {contains_at(Uid1), contains_at(Uid2)} of
-            {Uid1,Uid2} -> add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid);
-            _       -> add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts)
-        end,
     {reply, [ ?UID1(Uid1)
             , ?USER1(P1ToUse)
             , ?UID2(Uid2)
@@ -315,10 +326,15 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     0 = string:rstr(binary_to_list(TOldUser), "@"),
 
     % we should only get one old debt since these are supposed to be per user.
-    [{P1, P2, _V}] = get_tot_debts(Debts, TOldUser),
+    % but we allow there to be more
+    ResDebts = get_tot_debts(Debts, TOldUser),
 
-    %% Check that ReqBy is one of the users
-    true = P1 == ReqBy orelse P2 == ReqBy,
+    [{P1, P2, _V}] = lists:filter(fun({PP1, PP2, _}) ->
+                                          case {PP1, PP2} of
+                                              {ReqBy, _} -> true;
+                                              {_, ReqBy} -> true;
+                                              _ -> false
+                                          end end, ResDebts),
 
     %the user must exist already
     [{TNewUser, _Username}] = db_w:lookup(Users, TNewUser),
@@ -327,22 +343,31 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     db_w:delete(Debts, {P1, P2}),
 
     TNewUser = verify_uid(TNewUser, Users),
-    ok = db_w:delete(Users, TOldUser),
+    %% if there is just one debt
+    case ResDebts of
+        [{P1, P2, _}] ->
+            ok = db_w:delete(Users, TOldUser),
+            ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
+        _ -> ok
+    end,
 
     % all debts are approved
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
-    ok = db_w:delete(ApprovalDebt, TOldUser),
     _DebtLists = lists:map(fun(Id) ->
-                                  [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
-                                  ok = db_w:delete(DebtRecord, Id),
-                                  case Uid1 of
-                                      TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
-                                                  add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
-                                      _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
-                                                  add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
-                                  end
-                          end, DebtIds),
+                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
+                                   case {Uid1, Uid2} of
+                                       {P1, P2} ->
+                                           ok = db_w:delete(DebtRecord, Id),
+                                           case Uid1 of
+                                               TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
+                                                           add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
+                                               _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
+                                                           add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
+                                           end;
+                                       _ -> ok
+                                   end
+                           end, DebtIds),
 
     lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
@@ -368,8 +393,8 @@ terminate(Reason, State) ->
 %% add approval of debts
 %% add transferral of debts
 %% add event groups
-code_change(OldVsn, State, "0.2c") ->
-    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2b"]),
+code_change(OldVsn, State, "0.2d") ->
+    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2c"]),
     {ok, State};
 
 code_change(_OldVsn, State, _Extra) ->
@@ -389,6 +414,19 @@ add_to_earlier_debt({_Uuid, Key, _TimeStamp, _Reason, Amount}, Db) ->
         [] -> db_w:insert(Db, {Key, Amount});
         [{_,Amount2}] -> db_w:insert(Db, {Key, Amount + Amount2})
     end.
+
+
+check_allowed_to_add(ReqBy, Uid1, Uid2, Debts) ->
+    Key = case Uid1 < Uid2 of
+              true -> {Uid1,Uid2};
+              _ -> {Uid2, Uid1}
+          end,
+    Uid = case Uid1 of
+              ReqBy -> Uid2;
+              _ -> Uid1
+          end,
+    [{Key, _Value}] = get_tot_debts(Debts, Uid),
+    ok.
 
 uuid_to_binary(Uuid) ->
      list_to_binary(uuid:to_string(Uuid)).
