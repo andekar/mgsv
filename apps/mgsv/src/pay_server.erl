@@ -182,18 +182,13 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
          end,
 
     _ = case {contains_at(Uid1), contains_at(Uid2)} of
-            {Uid1,Uid2} -> add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid);
-            _       -> %% we need to make sure that ReqBy is the one allowed to add debt to this user
-                ok = check_allowed_to_add(ReqBy, Uid1, Uid2, Debts),
+            {Uid1,Uid2} -> add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts);
+            _       ->
                 add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts)
         end,
 
-    %%update_approved_debts(Uid, ApprovalDebt, [Uuid]),
-    %% this goes into unapproved debts if we are not one non existing user
     lager:debug("Inserting Debt: ~p", sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
-    %% this we only do when a debt has been approved!!!
-    %%add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts),
     {reply, [ ?UID1(Uid1)
             , ?USER1(P1ToUse)
             , ?UID2(Uid2)
@@ -213,7 +208,7 @@ handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
     Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
     ApprovedBy = ?APPROVED_BY(Props),
     %crash if we are not the one supposed to approve the debt
-    ReqBy = ?NOT_APPROVED_BY(Props),
+%    ReqBy = ?NOT_APPROVED_BY(Props),
 
     % crash if there is no such debt
     [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Uuid),
@@ -238,11 +233,11 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovedBy = uid_to_lower(?APPROVED_BY(Props)),
     %crash if we are not the one supposed to approve the debt
     %%ReqBy = ?NOT_APPROVED_BY(Props),
-    ok = case {?NOT_APPROVED_BY(Props), ApprovedBy} of
-             {ReqBy, _} -> ok;
-             {_, ReqBy} -> ok;
-             _          -> failed
-         end,
+%%    ok = case {?NOT_APPROVED_BY(Props), ApprovedBy} of
+%%             {ReqBy, _} -> ok;
+%%             {_, ReqBy} -> ok;
+%%             _          -> failed
+%%         end,
     % crash if there is no such debt
     [{Uuid, {Uid1, Uid2}, _Time, _Reason, _Amount}] = db_w:lookup(DebtRecord, Uuid),
 
@@ -250,7 +245,9 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     %For both which is wrong
     remove_not_approved_debt(Uid1, ApprovalDebt, Uuid),
     remove_not_approved_debt(Uid2, ApprovalDebt, Uuid),
-    lager:info("deleting not approved debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+    remove_debt(Uid1, ApprovalDebt, Uuid),
+    remove_debt(Uid2, ApprovalDebt, Uuid),
+    lager:info("deleting debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->
@@ -476,8 +473,16 @@ remove_not_approved_debt(Key, Name, Item) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
     NewEntry = proplists:delete(Item,?NOT_APPROVED_DEBTS(Props)),
-    lager:info("removing notapproved debts: ~p~n", [NewEntry]),
+    lager:info("removing debts: ~p~n", [NewEntry]),
     ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
+                                         NewEntry)}).
+
+remove_debt(Key, Name, Item) ->
+    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+    ok = db_w:delete(Name, Key),
+    NewEntry = proplists:delete(Item,?APPROVED_DEBTS(Props)),
+    lager:info("removing debts: ~p~n", [NewEntry]),
+    ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          NewEntry)}).
 
 get_not_approved_debt(Key, Name, Item) ->
