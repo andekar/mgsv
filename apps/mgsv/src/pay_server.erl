@@ -228,6 +228,7 @@ handle_call({approve_debt, ReqBy, Uuid}, _From, State) ->
 handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtRecord = ?DEBT_RECORD(State),
+    Debts = ?DEBTS(State),
     %% get the not approved debt
     %%Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
     %%ApprovedBy = uid_to_lower(?APPROVED_BY(Props)),
@@ -239,14 +240,20 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
 %%             _          -> failed
 %%         end,
     % crash if there is no such debt
-    [{Uuid, {Uid1, Uid2}, _Time, _Reason, _Amount}] = db_w:lookup(DebtRecord, Uuid),
+    [{Uuid, {Uid1, Uid2}, _Time, _Reason, Amount}] = db_w:lookup(DebtRecord, Uuid),
 
     db_w:delete(DebtRecord, Uuid),
     %For both which is wrong
-    remove_not_approved_debt(Uid1, ApprovalDebt, Uuid),
+    Props = remove_not_approved_debt(Uid1, ApprovalDebt, Uuid),
     remove_not_approved_debt(Uid2, ApprovalDebt, Uuid),
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
+
+    case proplists:get_all_values(Props) of
+        [] ->
+            add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, undefined, undefined, -1 * Amount), Debts);
+        _ -> ok
+    end,
     lager:info("deleting debt uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
     {reply, ok, State};
 
@@ -475,12 +482,13 @@ remove_not_approved_debt(Key, Name, Item) ->
     NewEntry = proplists:delete(Item,?NOT_APPROVED_DEBTS(Props)),
     lager:info("removing debts: ~p~n", [NewEntry]),
     ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
-                                         NewEntry)}).
+                                         NewEntry)}),
+    ?NOT_APPROVED_DEBTS(Props).
 
 remove_debt(Key, Name, Item) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
-    NewEntry = proplists:delete(Item,?APPROVED_DEBTS(Props)),
+    NewEntry = lists:delete(Item,?APPROVED_DEBTS(Props)),
     lager:info("removing debts: ~p~n", [NewEntry]),
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          NewEntry)}).
