@@ -176,8 +176,8 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
                             [{?USER1, ?UID1}, {?USER2, ?UID2}]),
     % one of them must be the requester
     ok = case ReqBy of
-             P1ToUse -> ok;
-             P2ToUse -> ok;
+             Uid1 -> ok;
+             Uid2 -> ok;
              _ -> error_requester_not_part_of_debt
          end,
 
