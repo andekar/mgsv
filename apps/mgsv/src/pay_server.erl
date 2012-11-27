@@ -249,7 +249,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
 
-    case proplists:get_all_values(Props) of
+    case proplists:get_all_values(Uuid, Props) of
         [] ->
             add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, undefined, undefined, -1 * Amount), Debts);
         _ -> ok
