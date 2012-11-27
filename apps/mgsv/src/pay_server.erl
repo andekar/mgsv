@@ -247,7 +247,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     remove_not_approved_debt(Uid2, ApprovalDebt, Uuid),
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
-    lager:info("deleting debt uuid: ~p  Requested by: ~p Approved by ~p Not approved by ~p~n", [Uuid, ReqBy, ApprovedBy, ReqBy]),
+    lager:info("deleting debt uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->
