@@ -229,7 +229,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtRecord = ?DEBT_RECORD(State),
     %% get the not approved debt
-    Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
+    %%Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
     %%ApprovedBy = uid_to_lower(?APPROVED_BY(Props)),
     %crash if we are not the one supposed to approve the debt
     %%ReqBy = ?NOT_APPROVED_BY(Props),
