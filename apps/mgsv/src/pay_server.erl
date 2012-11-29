@@ -399,8 +399,8 @@ terminate(Reason, State) ->
 %% add approval of debts
 %% add transferral of debts
 %% add event groups
-code_change(OldVsn, State, "0.2d") ->
-    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2c"]),
+code_change(OldVsn, State, "0.2e") ->
+    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.2e"]),
     {ok, State};
 
 code_change(_OldVsn, State, _Extra) ->

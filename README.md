@@ -1,5 +1,14 @@
 mgsv
 ====
+
+------ V0.2f changes
+- fix transfer debts which was broken
+
+------ V0.2e changes
+- removed approve debts
+- add functionaliy to remove debts (same way as removing what previously was approval debts)
+
+
 ------ V0.2d changes
 
 
