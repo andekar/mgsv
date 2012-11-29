@@ -365,9 +365,11 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                                            ok = db_w:delete(DebtRecord, Id),
                                            case Uid1 of
                                                TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
-                                                           add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
+                                                           add_approved_debt(TNewUser, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount), Debts);
+%                                                           add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
                                                _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
-                                                           add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
+                                                           add_approved_debt(Uid1, TNewUser, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount), Debts)
+%                                                           add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
                                            end;
                                        _ -> ok
                                    end
@@ -469,12 +471,12 @@ update_approved_debts(Key, Name, Items) ->
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          ?APPROVED_DEBTS(Props) ++ Items)}).
 
-update_not_approved_debts(Key, Name, Items) ->
-    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    ok = db_w:delete(Name, Key),
-    lager:info("updating notapproved debts for ~p with ~p", [Key, Items]),
-    ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
-                                         ?NOT_APPROVED_DEBTS(Props) ++ Items)}).
+%update_not_approved_debts(Key, Name, Items) ->
+%    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
+%    ok = db_w:delete(Name, Key),
+%    lager:info("updating notapproved debts for ~p with ~p", [Key, Items]),
+%    ok = db_w:insert(Name, {Key, replace_prop(?NOT_APPROVED_DEBTS, Props,
+%                                         ?NOT_APPROVED_DEBTS(Props) ++ Items)}).
 
 remove_not_approved_debt(Key, Name, Item) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
@@ -532,15 +534,15 @@ add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, SortedDebt, Debts) ->
     update_approved_debts(Uid2, ApprovalDebt, [Uuid]),
     add_to_earlier_debt(SortedDebt, Debts).
 
-add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid) ->
-    case Uid1 of
-        ReqBy -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid2}]}],
-                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
-                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd);
-        _     -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid1}]}],
-                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
-                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd)
-    end.
+%add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid) ->
+%    case Uid1 of
+%        ReqBy -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid2}]}],
+%                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
+%                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd);
+%        _     -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid1}]}],
+%                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
+%                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd)
+%    end.
 
 uid_to_lower(undefined) ->
     undefined;
