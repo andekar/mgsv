@@ -3,6 +3,7 @@ mgsv
 
 ------ V0.2f changes
 - fix transfer debts which was broken
+- Add possibility to change username in server
 
 ------ V0.2e changes
 - removed approve debts
