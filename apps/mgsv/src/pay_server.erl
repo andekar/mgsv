@@ -98,7 +98,7 @@ handle_call(get_users, _From, State) ->
 
 handle_call({change_username, Uid, UserName}, _From, State) ->
     Users = ?USERS(State),
-    {Uid, _OldUserName} = db_w:lookup(Users, Uid),
+    [{Uid, _OldUserName}] = db_w:lookup(Users, Uid),
     db_w:delete(Users, Uid),
     db_w:insert(Users, {Uid, UserName});
 
