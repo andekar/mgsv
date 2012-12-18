@@ -1,5 +1,7 @@
 mgsv
 ====
+------ V0.2g changes
+- fix transfer debts so that it does not add debts several times
 
 ------ V0.2f changes
 - fix transfer debts which was broken

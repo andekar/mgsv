@@ -1,4 +1,13 @@
 %% appup generated for mgsv by rebar ("2012/09/07 19:58:56")
+{"0.2g", [{"0.2f", [
+                  {update, distributor},
+                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
+                  {update, machine_sup, supervisor},
+                  {update, mgsv_server,{advanced, "0.2e"}},
+                  {update, pay_server, {advanced, "0.2e"}},
+                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
+                 ]}],
+        [{"0.2f", []}]}.
 {"0.2f", [{"0.2e", [
                   {update, distributor},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
