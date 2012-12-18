@@ -100,7 +100,8 @@ handle_call({change_username, Uid, UserName}, _From, State) ->
     Users = ?USERS(State),
     [{Uid, _OldUserName}] = db_w:lookup(Users, Uid),
     db_w:delete(Users, Uid),
-    db_w:insert(Users, {Uid, UserName});
+    db_w:insert(Users, {Uid, UserName}),
+    {reply, [], State};
 
 handle_call({get_user_debt, User},  _From, State) ->
     {reply, get_tot_debts(?DEBTS(State), User), State};
