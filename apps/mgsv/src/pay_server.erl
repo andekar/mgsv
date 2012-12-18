@@ -26,6 +26,7 @@
          , user_exist/1
          , user_exist/2
          , get_usernames/1
+         , change_username/2
          , check_allowed_to_add/4]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -68,6 +69,9 @@ get_debts() ->
 get_user_debt(User) ->
     gen_server:call(?MODULE, {get_user_debt, User}).
 
+change_username(Uid, UserName) ->
+    gen_server:call(?MODULE, {change_username, Uid, UserName}).
+
 get_user_transactions(User) ->
     gen_server:call(?MODULE, {get_user_transactions, User}).
 
@@ -91,6 +95,12 @@ handle_call(get_users, _From, State) ->
     Users = ?USERS(State),
     UserList = db_w:foldl(fun({Uuid, User}, Acc) -> [{Uuid, User}|Acc] end, [], Users),
     {reply, UserList, State};
+
+handle_call({change_username, Uid, UserName}, _From, State) ->
+    Users = ?USERS(State),
+    {Uid, _OldUserName} = db_w:lookup(Users, Uid),
+    db_w:delete(Users, Uid),
+    db_w:insert(Users, {Uid, UserName});
 
 handle_call({get_user_debt, User},  _From, State) ->
     {reply, get_tot_debts(?DEBTS(State), User), State};
