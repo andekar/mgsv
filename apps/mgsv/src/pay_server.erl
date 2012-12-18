@@ -229,16 +229,6 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtRecord = ?DEBT_RECORD(State),
     Debts = ?DEBTS(State),
-    %% get the not approved debt
-    %%Props = get_not_approved_debt(ReqBy, ApprovalDebt, Uuid),
-    %%ApprovedBy = uid_to_lower(?APPROVED_BY(Props)),
-    %crash if we are not the one supposed to approve the debt
-    %%ReqBy = ?NOT_APPROVED_BY(Props),
-%%    ok = case {?NOT_APPROVED_BY(Props), ApprovedBy} of
-%%             {ReqBy, _} -> ok;
-%%             {_, ReqBy} -> ok;
-%%             _          -> failed
-%%         end,
     % crash if there is no such debt
     [{Uuid, {Uid1, Uid2}, _Time, _Reason, Amount}] = db_w:lookup(DebtRecord, Uuid),
 
@@ -347,6 +337,10 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     db_w:delete(Debts, {P1, P2}),
 
     TNewUser = verify_uid(TNewUser, Users),
+
+    % all debts are approved
+    DebtIds = approved_debts(TOldUser, ApprovalDebt),
+
     %% if there is just one debt
     case ResDebts of
         [{P1, P2, _}] ->
@@ -354,9 +348,6 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
             ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
         _ -> ok
     end,
-
-    % all debts are approved
-    DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
     _DebtLists = lists:map(fun(Id) ->
                                    [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
@@ -533,16 +524,6 @@ add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, SortedDebt, Debts) ->
     update_approved_debts(Uid1, ApprovalDebt, [Uuid]),
     update_approved_debts(Uid2, ApprovalDebt, [Uuid]),
     add_to_earlier_debt(SortedDebt, Debts).
-
-%add_not_approved_debt(Uid1, Uid2, ReqBy, ApprovalDebt, Uuid) ->
-%    case Uid1 of
-%        ReqBy -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid2}]}],
-%                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
-%                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd);
-%        _     -> ToAdd = [{Uuid, [{?APPROVED_BY, ReqBy}, {?NOT_APPROVED_BY, Uid1}]}],
-%                 update_not_approved_debts(Uid1, ApprovalDebt, ToAdd),
-%                 update_not_approved_debts(Uid2, ApprovalDebt, ToAdd)
-%    end.
 
 uid_to_lower(undefined) ->
     undefined;
