@@ -368,10 +368,12 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                                            ok = db_w:delete(DebtRecord, Id),
                                            case Uid1 of
                                                TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
-                                                           add_to_earlier_debt(sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount), Debts);
+                                                           add_to_earlier_debt(sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount), Debts),
+                                                           update_approved_debts(TNewUser, ApprovalDebt, [Uuid]);
 %                                                           add_not_approved_debt(TNewUser, Uid2, ReqBy, ApprovalDebt, Uuid);
                                                _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
-                                                           add_to_earlier_debt(sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount), Debts)
+                                                           add_to_earlier_debt(sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount), Debts),
+                                                           update_approved_debts(TNewUser, ApprovalDebt, [Uuid])
 %                                                           add_not_approved_debt(Uid1, TNewUser, ReqBy, ApprovalDebt, Uuid)
                                            end;
                                        _ -> ok

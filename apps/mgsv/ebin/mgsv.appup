@@ -1,5 +1,5 @@
 %% appup generated for mgsv by rebar ("2012/09/07 19:58:56")
-{"0.2g", [{"0.2f", [
+{"0.2h", [{"0.2g", [
                   {update, distributor},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
                   {update, machine_sup, supervisor},
@@ -7,66 +7,4 @@
                   {update, pay_server, {advanced, "0.2e"}},
                   {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
                  ]}],
-        [{"0.2f", []}]}.
-{"0.2f", [{"0.2e", [
-                  {update, distributor},
-                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
-                  {update, machine_sup, supervisor},
-                  {update, mgsv_server,{advanced, "0.2e"}},
-                  {update, pay_server, {advanced, "0.2e"}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-                 ]}],
-        [{"0.2e", []}]}.
-{"0.2e", [{"0.2d", [
-                  {update, distributor},
-                  {update, mgsv_sup, supervisor},
-                  {update, machine_sup, supervisor},
-                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
-                  {update, mgsv_server,{advanced, "0.2d"}},
-                  {update, pay_server, {advanced, "0.2d"}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-                 ]}],
-        [{"0.2d", []}]}.
-{"0.2d", [{"0.2c", [
-                  {load_module, db_w},
-                  {update, distributor},
-                  {update, mgsv_sup, supervisor},
-                  {update, machine_sup, supervisor},
-                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
-                  {update, mgsv_server,{advanced, "0.2c"}},
-                  {update, pay_server, {advanced, "0.2c"}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-                 ]}],
-        [{"0.2c", []}]}.
-{"0.2c", [{"0.2b", [
-                  {load_module, db_w},
-                  {update, distributor},
-                  {update, mgsv_sup, supervisor},
-%                  {load_module, mgsv_lager_sup},
-%                  {apply, {supervisor, restart_child, [mgsv_sup, mgsv_lager_sup]}},
-                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
-                  {update, mgsv_server,{advanced, "0.2b"}},
-                  {update, pay_server, {advanced, "0.2b"}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-                 ]}],
-        [{"0.2b", []}]}.
-{"0.2b", [{"0.2", [
-                  {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
-                  {update, mgsv_server,{advanced, "0.2"}},
-                  {update, pay_server, {advanced, "0.2"}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-                 ]}],
-        [{"0.2", []}]}.
-{"0.2", [{"0.1", [
-                  {update, mgsv_server,{advanced, "0.1"}},
-                  {update, pay_server, {advanced, "0.1"}},
-                  {update, distributor},
-                  {update, mgsv_sup, supervisor},
-                  {load_module, uuid},
-                  {load_module, machine_sup},
-                  {apply, {supervisor, terminate_child, [mgsv_sup, webmachine_mochiweb]}},
-                  {apply, {supervisor, delete_child, [mgsv_sup, webmachine_mochiweb]}},
-                  {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
-
-                 ]}],
-        [{"0.1", []}]}.
+        [{"0.2g", []}]}.
