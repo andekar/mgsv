@@ -127,7 +127,7 @@ handle_call(["transactions"], _From, State) ->
 
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", Request),
-    {reply, ok, State}.
+    {reply, {ok, <<"ok">>}, State}.
 
 handle_cast(Request, State) ->
     lager:alert("Handle unknown cast ~p", Request),
