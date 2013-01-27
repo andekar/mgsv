@@ -3,8 +3,8 @@
                   {update, distributor},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
                   {update, machine_sup, supervisor},
-                  {update, mgsv_server,{advanced, "0.2e"}},
-                  {update, pay_server, {advanced, "0.2e"}},
+                  {update, mgsv_server,{advanced, "0.2h"}},
+                  {update, pay_server, {advanced, "0.2h"}},
                   {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
                  ]}],
         [{"0.2g", []}]}.

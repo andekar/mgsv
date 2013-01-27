@@ -9,7 +9,8 @@
                   stdlib,
                   mochiweb,
                   webmachine,
-                  ossp_uuid
+                  ossp_uuid,
+                  ssl
                  ]},
   {mod, { mgsv_app, []}},
   {env, []}

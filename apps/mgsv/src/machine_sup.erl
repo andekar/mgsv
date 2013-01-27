@@ -33,7 +33,7 @@ init([]) ->
                          ["..","..", "priv", "dispatch.conf"])),
     WebConfigSSL = [{name, one},
                  {ip, Ip},
-                 {port, 8000},
+                 {port, 8443},
                  {log_dir, "priv/log"},
                  {ssl, true},
                     {ssl_opts, [
@@ -44,7 +44,7 @@ init([]) ->
 %                             {keyfile, "priv/server.key"}]},
                  {dispatch, Dispatch}],
 
-    _WebSSL = {one,
+    WebSSL = {one,
            {webmachine_mochiweb, start, [WebConfigSSL]},
            permanent, 5000, worker, [mochiweb_socket_server]},
     WebConfig = [{name, two},
@@ -56,5 +56,5 @@ init([]) ->
     Web = {two,
            {webmachine_mochiweb, start, [WebConfig]},
            permanent, 5000, worker, [mochiweb_socket_server]},
-    Processes = [Web],
+    Processes = [Web, WebSSL],
     {ok, { {one_for_one, 6000, 1}, Processes} }.

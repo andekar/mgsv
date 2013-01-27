@@ -27,7 +27,8 @@
          , user_exist/2
          , get_usernames/1
          , change_username/2
-         , check_allowed_to_add/4]).
+         , check_allowed_to_add/4
+        ]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
