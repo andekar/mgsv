@@ -12,8 +12,6 @@
 
 -export([ sort_user_debt/6
          , add_to_earlier_debt/2
-         , get_debts/0
-         , get_transactions/0
          , get_user_transactions/1
          , delete_debt/1
          , register_user/2
@@ -59,9 +57,6 @@ add_debt(Message) ->
 delete_debt(Message) ->
     gen_server:call(?MODULE, Message).
 
-get_debts() ->
-    gen_server:call(?MODULE, get_debts).
-
 get_user_debt(User) ->
     gen_server:call(?MODULE, {get_user_debt, User}).
 
@@ -70,9 +65,6 @@ change_username(Uid, UserName) ->
 
 get_user_transactions(User) ->
     gen_server:call(?MODULE, {get_user_transactions, User}).
-
-get_transactions() ->
-    gen_server:call(?MODULE, get_transactions).
 
 get_usernames(Uids) ->
     gen_server:call(?MODULE, {get_usernames, Uids}).
@@ -110,25 +102,8 @@ handle_call({get_user_transactions, TUser},  _From, State) ->
                           end, DebtIds),
     {reply, DebtLists, State};
 
-handle_call(get_debts, _From, State) ->
-    Debts = ?DEBTS(State),
-    DebtList = db_w:foldl(fun({{P1,P2}, Amount}, Acc) -> [{P1,P2,Amount}|Acc] end, [], Debts),
-    {reply, DebtList, State};
-
 handle_call({user_exists, Uid}, _From, State) ->
     {reply, user_exist(Uid, State), State};
-
-handle_call(get_transactions, _From, State) ->
-    Transactions = proplists:get_value(?DEBT_RECORD, State),
-    DebtList = db_w:foldl(fun({Uuid, {Uuid1,Uuid2}, TimeStamp, Reason, Amount}, Acc) ->
-                                  [{ Uuid
-                                     , Uuid1
-                                     , Uuid2
-                                     , TimeStamp
-                                     , Reason
-                                     , Amount}|Acc] end, []
-                          , Transactions),
-    {reply, DebtList, State};
 
 handle_call({get_usernames, Uids}, _From, State) ->
     Users = proplists:get_value(?USERS, State),

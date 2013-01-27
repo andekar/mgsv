@@ -18,10 +18,6 @@ init([]) ->
 send_message(Message) ->
     gen_server:call(?MODULE, Message).
 
-%% callbacks
-%handle_call([], _From, State) ->
-%    {reply, {ok, "ok"}, State};
-
 %Add debts
 handle_call({[], TStruct}, _From, State) ->
     %destructify
@@ -79,16 +75,6 @@ handle_call(["users"], _From, State) ->
                        pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
-handle_call(["debts"], _From, State) ->
-    Return = lists:map(fun({P1,P2,Amount}) ->
-                           ?JSONSTRUCT([?DEBT([ ?UID1(P1)
-                                              , ?UID2(P2)
-                                              , ?AMOUNT(Amount)
-                                                              ])]) end,
-                                                     pay_server:get_debts()),
-    Return2 = mochijson2:encode(Return),
-    {reply, {ok, Return2}, State};
-
 handle_call(["user_debt", User], _From, State) ->
     Return = lists:map(fun({P1,P2,Amount}) ->
                            ?JSONSTRUCT([?DEBT([ ?UID1(P1)
@@ -109,19 +95,6 @@ handle_call(["user_transactions", User], _From, State) ->
                                               , ?AMOUNT(Amount)
                                                               ])]) end,
                                                      pay_server:get_user_transactions(list_to_binary(User))),
-    Return2 = mochijson2:encode(Return),
-    {reply, {ok, Return2}, State};
-
-handle_call(["transactions"], _From, State) ->
-    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
-                           ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
-                                              , ?UID1(P1)
-                                              , ?UID2(P2)
-                                              , ?TIMESTAMP(TimeStamp)
-                                              , ?REASON(Reason)
-                                              , ?AMOUNT(Amount)
-                                                              ])]) end,
-                                                     pay_server:get_transactions()),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
