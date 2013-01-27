@@ -81,18 +81,8 @@
 -define(DEBT_APPROVAL_TRANSACTIONS, debt_approval_transactions).
 -define(DEBT_APPROVAL_TRANSACTIONS(Props), proplists:get_value(?DEBT_APPROVAL_TRANSACTIONS, Props)).
 
-%% property of (not)approved debts
 -define(APPROVED_DEBTS, approved_debts).
 -define(APPROVED_DEBTS(Props), proplists:get_value(?APPROVED_DEBTS, Props, [])).
 
--define(NOT_APPROVED_DEBTS, not_approved_debts).
--define(NOT_APPROVED_DEBTS(Props), proplists:get_value(?NOT_APPROVED_DEBTS, Props, [])).
-
 %% to lower and check @
 -define(UID_TO_LOWER(User), list_to_binary(string:to_lower(binary_to_list(User)))).
-
--define(APPROVED_BY, approved_by).
--define(APPROVED_BY(Props), proplists:get_value(?APPROVED_BY, Props)).
-
--define(NOT_APPROVED_BY, not_approved_by).
--define(NOT_APPROVED_BY(Props), proplists:get_value(?NOT_APPROVED_BY, Props)).

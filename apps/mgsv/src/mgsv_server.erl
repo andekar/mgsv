@@ -40,17 +40,6 @@ handle_call({["users"], Uids}, _From, State) ->
     Struct = pay_server:get_usernames(proplists:delete(?REQUEST_BY, RealUids)),
     {reply, {ok, mochijson2:encode(Struct)}, State};
 
-%approve debt
-handle_call({["approve_debt"], TStruct}, _From, State) ->
-    %destructify
-    Struct = lists:flatten(destructify_list(TStruct)),
-    [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
-    _Reply = lists:map(fun({?UUID, Vars}) ->
-                               lager:info("Approving: ~p", [Vars]),
-                               pay_server:approve_debt({approve_debt, ReqBy, Vars})
-                               end, proplists:delete(?REQUEST_BY, Struct)),
-    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
-
 %register user
 handle_call({["register"], TStruct}, _From, State) ->
     %destructify
@@ -120,20 +109,6 @@ handle_call(["user_transactions", User], _From, State) ->
                                               , ?AMOUNT(Amount)
                                                               ])]) end,
                                                      pay_server:get_user_transactions(list_to_binary(User))),
-    Return2 = mochijson2:encode(Return),
-    {reply, {ok, Return2}, State};
-
-handle_call(["not_approved_user_transactions", User], _From, State) ->
-    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount, ApprovedBy}) ->
-                           ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
-                                              , ?UID1(P1)
-                                              , ?UID2(P2)
-                                              , ?TIMESTAMP(TimeStamp)
-                                              , ?REASON(Reason)
-                                              , ?AMOUNT(Amount)
-                                              , {approved_by, ApprovedBy}
-                                                              ])]) end,
-                                                     pay_server:user_not_approved_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
