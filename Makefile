@@ -4,28 +4,28 @@ APP := mgsv
 .PHONY: deps
 
 all: deps
-	@rebar compile
+	@./rebar compile
 
 deps:
-	@rebar get-deps
+	@./rebar get-deps
 
 clean:
-	@rebar clean
+	@./rebar clean
 
 distclean: clean
-	@rebar delete-deps
+	@./rebar delete-deps
 
 release:
-	@rebar clean
-	@rebar compile
+	@./rebar clean
+	@./rebar compile
 	cd rel
-	@rebar -v generate
+	@./rebar -v generate
 
 rel:
-	@rebar clean
-	@rebar compile
+	@./rebar clean
+	@./rebar compile
 	cd rel
-	@rebar -v generate
+	@r./ebar -v generate
 
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'

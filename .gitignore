@@ -1,7 +1,8 @@
 #ignore .beam
 *.beam
-rel/mgsv/*
+rel/mgsv*/*
 deps
 .#*
 rebar
 *ebin*
+*.dets
