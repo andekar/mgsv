@@ -10,3 +10,4 @@ rebar
 *.crt
 *.csr
 *.org
+*.key
