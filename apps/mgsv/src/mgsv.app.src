@@ -10,7 +10,8 @@
                   mochiweb,
                   webmachine,
                   ossp_uuid,
-                  ssl
+                  ssl,
+                  asn1
                  ]},
   {mod, { mgsv_app, []}},
   {env, []}
