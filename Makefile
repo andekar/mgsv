@@ -19,7 +19,7 @@ release:
 	@./rebar clean
 	@./rebar compile
 	cd rel
-	@./../rebar -v generate
+	@./rebar -v generate
 
 rel:
 	@./rebar clean
