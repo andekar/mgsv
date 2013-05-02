@@ -11,3 +11,4 @@ rebar
 *.csr
 *.org
 *.key
+*.der
