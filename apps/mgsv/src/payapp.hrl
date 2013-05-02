@@ -10,6 +10,10 @@
 -define(REQUEST_BY, <<"request_by">>).
 -define(REQUEST_BY(By), {?REQUEST_BY, By}).
 
+%% ios token
+-define(IOS_TOKEN, <<"ios_token">>).
+-define(IOS_TOKEN(Token), {?IOS_TOKEN, Token}).
+
 %% Uniq uid
 -define(UUID, <<"uuid">>).
 -define(UUID(Uuid), {?UUID, Uuid}).
@@ -21,6 +25,10 @@
 %% User 2 id
 -define(UID2, <<"uid2">>).
 -define(UID2(Uid2), {?UID2, Uid2}).
+
+%% provided uuid
+-define(ECHO_UUID, <<"echo_uuid">>).
+-define(ECHO_UUID(Uuid), {?ECHO_UUID, Uuid}).
 
 %% Username 1
 -define(USER1, <<"user1">>).
@@ -67,6 +75,10 @@
 %% {Uuid, {Uuid1, Uuid2}, TimeStamp, Reason, Amount}
 -define(DEBT_RECORD, debt_record).
 -define(DEBT_RECORD(Props), proplists:get_value(?DEBT_RECORD, Props)).
+
+%% {Uuid, devicetoken}
+-define(IOS_PUSH, debt_record).
+-define(IOS_PUSH(Props), proplists:get_value(?IOS_PUSH, Props)).
 
 %% DEBTS {{Uid1, Uid2}, Amount}
 -define(DEBTS, debts).

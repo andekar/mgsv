@@ -24,6 +24,8 @@
          , get_usernames/1
          , change_username/2
          , check_allowed_to_add/4
+         , add_ios_dev_token/2
+         , remove_user_debt/2
         ]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -75,6 +77,12 @@ change_user(OldUser, NewUser) ->
 transfer_debts(OldUser, NewUser, ReqBy) ->
     gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
 
+add_ios_dev_token(Uuid, DevId) ->
+    gen_server:cast(?MODULE, {add_ios_dev_tok, Uuid, DevId}).
+
+remove_user_debt(Uuid, ReqBy) ->
+    gen_server:cast(?MODULE,{remove_user_debt, Uuid, ReqBy}).
+
 %% callbacks
 handle_call(get_users, _From, State) ->
     Users = ?USERS(State),
@@ -96,10 +104,11 @@ handle_call({get_user_transactions, TUser},  _From, State) ->
     DebtRecord = ?DEBT_RECORD(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtIds = approved_debts(User, ApprovalDebt),
-    DebtLists = lists:map(fun(Id) ->
-                                  [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
-                                  {Uuid, Uid1, Uid2, Time, Reason, Amount}
-                          end, DebtIds),
+    DebtLists =
+        lists:map(fun(Id) ->
+                  [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
+                  {Uuid, Uid1, Uid2, Time, Reason, Amount}
+             end, DebtIds),
     {reply, DebtLists, State};
 
 handle_call({user_exists, Uid}, _From, State) ->
@@ -127,6 +136,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
     Reason = proplists:get_value(?REASON, Struct),
     Amount = proplists:get_value(?AMOUNT, Struct),
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
+    EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
     ReqBy = ?UID_TO_LOWER(TReqBy),
     %% per user
     [{P1ToUse, Uid1}, {P2ToUse, Uid2}]
@@ -134,20 +144,13 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
                     Uid  = verify_uid(uid_to_lower(proplists:get_value(U, Struct)), Users),
                     PToUse = case db_w:lookup(Users, Uid) of
                                  %% make sure that we never autogenerate username
-                                  [] -> [{P, User}] = proplists:lookup_all(P, Struct),
-                                        db_w:insert(Users, {Uid, User}),
-                                        User;
-                                  [{_, R}]  -> R
-                              end,
-                    {PToUse, Uid} end,
-                            [{?USER1, ?UID1}, {?USER2, ?UID2}]),
-    % one of them must be the requester
-    ok = case ReqBy of
-             Uid1 -> ok;
-             Uid2 -> ok;
-             _ -> error_requester_not_part_of_debt
-         end,
-
+                                 [] -> [{P, User}] = proplists:lookup_all(P, Struct),
+                                       db_w:insert(Users, {Uid, User}),
+                                       User;
+                                 [{_, R}]  -> R
+                             end,
+                            {PToUse, Uid} end,
+                    [{?USER1, ?UID1}, {?USER2, ?UID2}]),
     _ = case {contains_at(Uid1), contains_at(Uid2)} of
             {Uid1,Uid2} -> add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount), Debts);
             _       ->
@@ -156,6 +159,12 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
 
     lager:debug("Inserting Debt: ~p", sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
     db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, Uid2, TimeStamp, Reason, Amount)),
+    _ = case ReqBy of
+            Uid1 -> pay_push_notification:notify_user(Uid2, Reason);
+            Uid2 -> pay_push_notification:notify_user(Uid1, Reason);
+            _ -> pay_push_notification:notify_user(Uid1, Reason),
+                 pay_push_notification:notify_user(Uid2, Reason)
+        end,
     {reply, [ ?UID1(Uid1)
             , ?USER1(P1ToUse)
             , ?UID2(Uid2)
@@ -165,7 +174,7 @@ handle_call({add, TReqBy, {?JSONSTRUCT, Struct}}, _From, State) ->
             , ?AMOUNT(Amount)
             , ?TIMESTAMP(TimeStamp)
             , ?STATUS(<<"ok">>)
-            ], State};
+            ] ++ EchoUuid, State};
 
 handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
@@ -196,6 +205,10 @@ handle_cast({register, Name, Uid}, State) ->
         _  -> lager:info("User already exist")
     end,
     {noreply, State};
+
+%handle_cast({add_ios_dev_tok, Uuid, DevId}, State) ->
+%    IOS_Toks = ?IOS_PUSH(State),
+%    db_w:insert(IOS_Toks, {Uuid, DevId});
 
 %% notice how any one can change their username if we add this to calls
 %% TODO Add change of calculated debt
@@ -242,6 +255,53 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     lager:info("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
+handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
+    Debts = ?DEBTS(State),
+    Users = ?USERS(State),
+    DebtRecord = ?DEBT_RECORD(State),
+    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
+
+    TOldUser = ?UID_TO_LOWER(TUuid),
+    ReqBy = ?UID_TO_LOWER(TReqBy),
+    % we should only get one old debt since these are supposed to be per user.
+    % but we allow there to be more
+    ResDebts = get_tot_debts(Debts, TOldUser),
+
+    [{P1, P2, _V}] = lists:filter(fun({PP1, PP2, _}) ->
+                                          case {PP1, PP2} of
+                                              {ReqBy, _} -> true;
+                                              {_, ReqBy} -> true;
+                                              _ -> false
+                                          end end, ResDebts),
+
+
+    % delete the debt
+    db_w:delete(Debts, {P1, P2}),
+
+    % all debts are approved
+    DebtIds = approved_debts(TOldUser, ApprovalDebt),
+
+    %% if there is just one debt
+    case ResDebts of
+        [{P1, P2, _}] ->
+            ok = db_w:delete(Users, TOldUser),
+            ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
+        _ -> ok
+    end,
+
+    _DebtLists = lists:map(
+                   fun(Id) ->
+                           [{Id, {Uid1, Uid2}, _Time, _Reason, _Amount}] = db_w:lookup(DebtRecord, Id),
+                           case {Uid1, Uid2} of
+                               {P1, P2} ->         %delete the approved debt id
+                                   ok = db_w:delete(DebtRecord, Id);
+                               _ -> ok
+                           end
+                   end, DebtIds),
+
+    lager:info("Removed debts from ~p ~n", [TOldUser]),
+    {noreply, State};
+
 % The user transferring debts must be the creator (ReqBy)
 handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     Debts = ?DEBTS(State),
@@ -285,21 +345,21 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     end,
 
     _DebtLists = lists:map(fun(Id) ->
-                                   [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
-                                   case {Uid1, Uid2} of
-                                       {P1, P2} ->
-                                           %delete the approved debt id
-                                           ok = db_w:delete(DebtRecord, Id),
-                                           case Uid1 of
-                                               TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
-                                                           add_to_earlier_debt(sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount), Debts),
-                                                           update_approved_debts(TNewUser, ApprovalDebt, [Uuid]);
-                                               _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
-                                                           add_to_earlier_debt(sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount), Debts),
-                                                           update_approved_debts(TNewUser, ApprovalDebt, [Uuid])
-                                           end;
-                                       _ -> ok
-                                   end
+                     [{Uuid, {Uid1, Uid2}, Time, Reason, Amount}] = db_w:lookup(DebtRecord, Id),
+                     case {Uid1, Uid2} of
+                         {P1, P2} ->
+                             %delete the approved debt id
+                             ok = db_w:delete(DebtRecord, Id),
+                             case Uid1 of
+                                 TOldUser -> db_w:insert(DebtRecord, sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount)),
+                                             add_to_earlier_debt(sort_user_debt(Uuid, TNewUser, Uid2, Time, Reason, Amount), Debts),
+                                             update_approved_debts(TNewUser, ApprovalDebt, [Uuid]);
+                                 _        -> db_w:insert(DebtRecord, sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount)),
+                                             add_to_earlier_debt(sort_user_debt(Uuid, Uid1, TNewUser, Time, Reason, Amount), Debts),
+                                             update_approved_debts(TNewUser, ApprovalDebt, [Uuid])
+                             end;
+                         _ -> ok
+                     end
                            end, DebtIds),
 
     lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),

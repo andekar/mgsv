@@ -19,9 +19,7 @@ send_message(Message) ->
     gen_server:call(?MODULE, Message).
 
 %Add debts
-handle_call({[], TStruct}, _From, State) ->
-    %destructify
-    Struct = lists:flatten(destructify_list(TStruct)),
+handle_call({[], Struct}, _From, State) ->
     [{_, ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     Reply = lists:map(fun({?DEBT, Vars}) ->
                               lager:debug("Add debt: ~p", [Vars]),
@@ -32,25 +30,20 @@ handle_call({[], TStruct}, _From, State) ->
 
 %get users
 handle_call({["users"], Uids}, _From, State) ->
-    RealUids = lists:map(fun({?JSONSTRUCT, [Val]}) -> Val end, Uids),
+    RealUids = lists:map(fun(Val) -> Val end, Uids),
     Struct = pay_server:get_usernames(proplists:delete(?REQUEST_BY, RealUids)),
     {reply, {ok, mochijson2:encode(Struct)}, State};
 
 %register user
-handle_call({["register"], TStruct}, _From, State) ->
-    %destructify
-    Struct = lists:flatten(destructify_list(TStruct)),
+handle_call({["register"], Struct}, _From, State) ->
     [{_, Uid}] = proplists:lookup_all(?UID, Struct),
     [{_, Name}] = proplists:lookup_all(<<"name">>, Struct),
     lager:info("Registering user ~p with uid ~p", [Name, Uid]),
     pay_server:register_user(Name, Uid),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
-
 %delete debt
-handle_call({["delete_debt"], TStruct}, _From, State) ->
-    %destructify
-    Struct = lists:flatten(destructify_list(TStruct)),
+handle_call({["delete_debt"], Struct}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     _Reply = lists:map(fun({?UUID, Vars}) ->
                                lager:info("Deleting: ~p", [Vars]),
@@ -58,10 +51,13 @@ handle_call({["delete_debt"], TStruct}, _From, State) ->
                                end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
-%delete debt
-handle_call({["transfer_debts"], TStruct}, _From, State) ->
-    %destructify
-    Struct = lists:flatten(destructify_list(TStruct)),
+handle_call({["delete_user_debt"], Struct}, _From, State) ->
+    [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
+    [{_,Uuid}] = proplists:lookup_all(?UUID, Struct),
+    pay_server:remove_user_debt(Uuid,ReqBy),
+    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+
+handle_call({["transfer_debts"], Struct}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Struct),
     [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Struct),
@@ -98,26 +94,30 @@ handle_call(["user_transactions", User], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
+handle_call({["ios_token"], Struct}, _From, State) ->
+    [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
+    [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Struct),
+    pay_push_notification:add_user_ios(ReqBy, IosToken),
+    {reply, {ok, <<"ok">>}, State};
+
+handle_call(["clear_badges", User], _From, State) ->
+    pay_push_notification:clear_counter(list_to_binary(string:to_lower(User))),
+    {reply, {ok, <<"ok">>}, State};
+
 handle_call(Request, _From, State) ->
-    lager:alert("Handle unknown call ~p", Request),
+    lager:alert("Handle unknown call ~p", [Request]),
     {reply, {ok, <<"ok">>}, State}.
 
 handle_cast(Request, State) ->
-    lager:alert("Handle unknown cast ~p", Request),
+    lager:alert("Handle unknown cast ~p", [Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(Reason, _State) ->
-    lager:emergency("TERMINATING ~p", Reason),
+    lager:emergency("TERMINATING ~p", [Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-destructify_list(List) ->
-    lists:map(fun destructify/1, List).
-
-destructify({?JSONSTRUCT, Val}) ->
-    Val.
