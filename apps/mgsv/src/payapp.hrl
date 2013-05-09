@@ -84,9 +84,22 @@
 -define(DEBTS, debts).
 -define(DEBTS(Props), proplists:get_value(?DEBTS, Props)).
 
-%% {Uuid, Username}
+%% {Uuid, username, ExtraInfo = [{user_type, STRING}}
 -define(USERS, users).
 -define(USERS(Props), proplists:get_value(?USERS, Props)).
+
+-define(USER_TYPE, usertype).
+-define(USER_TYPE(Type), {?USER_TYPE, Type}).
+
+-define(LOCAL_USER, <<"local">>).
+-define(GMAIL_USER, <<"gmail">>).
+-define(FACEBOOK_USER, <<"facebook">>).
+
+%% this is a list of extra info possible to add to some requests
+%% for example currencies would be possible to add here
+-define(MISC, <<"misc">>).
+-define(MISC(List), {?MISC, List}).
+
 
 %% {Uuid, [{?APPROVED_DEBTS, [Uids]}, {?NOT_APPROVED_DEBTS, [{Uid, [{approved_by|not_approved_by, Uid}]}|...]}] }
 %% That is Uuid = userid, Uids = debt_ids

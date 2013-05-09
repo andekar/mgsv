@@ -24,7 +24,7 @@ from_json(ReqData, Context) ->
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
     error_logger:info_msg("JSon received ~p at url ~p",[Any, Url]),
-    Decoded = lists:flatten(destructify_list(mochijson2:decode(Any))),
+    Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
     error_logger:info_msg("Decoded to ~p", [Decoded]),
     {ok, Result} = mgsv_server:send_message({Url, Decoded}),
 
@@ -41,14 +41,13 @@ to_html(ReqData, Context) ->
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
 
-destructify_list(List) when is_list(List)->
+destructify(List) when is_list(List)->
     lists:map(fun destructify/1, List);
-destructify_list(Other) ->
-    Other.
-
 destructify({?JSONSTRUCT, Val}) ->
-    destructify_list(Val);
-destructify(Any) ->
-    Any.
+    destructify(Val);
+destructify({Key, PossibleList}) ->
+    {Key, destructify(PossibleList)};
+destructify(Other) ->
+    Other.
 
 

@@ -38,8 +38,12 @@ handle_call({["users"], Uids}, _From, State) ->
 handle_call({["register"], Struct}, _From, State) ->
     [{_, Uid}] = proplists:lookup_all(?UID, Struct),
     [{_, Name}] = proplists:lookup_all(<<"name">>, Struct),
+    [{_, UserType}] = case proplists:lookup_all(?USER_TYPE, Struct) of
+                          [] -> [{?USER_TYPE, ?GMAIL_USER}];
+                          Other -> Other
+                      end,
     lager:info("Registering user ~p with uid ~p", [Name, Uid]),
-    pay_server:register_user(Name, Uid),
+    pay_server:register_user(Name, Uid, UserType),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 %delete debt
@@ -66,8 +70,8 @@ handle_call({["transfer_debts"], Struct}, _From, State) ->
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 handle_call(["users"], _From, State) ->
-    Return = lists:map(fun({Uuid, User}) ->
-                       ?JSONSTRUCT([?UID(Uuid), ?USER(User)]) end,
+    Return = lists:map(fun({Uuid, User, UserType}) ->
+                       ?JSONSTRUCT([?UID(Uuid), ?USER(User), ?USER_TYPE(UserType)]) end,
                        pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
@@ -82,13 +86,14 @@ handle_call(["user_debt", User], _From, State) ->
     {reply, {ok, Return2}, State};
 
 handle_call(["user_transactions", User], _From, State) ->
-    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount}) ->
+    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount, Misc}) ->
                            ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
                                               , ?UID1(P1)
                                               , ?UID2(P2)
                                               , ?TIMESTAMP(TimeStamp)
                                               , ?REASON(Reason)
                                               , ?AMOUNT(Amount)
+                                              , Misc
                                                               ])]) end,
                                                      pay_server:get_user_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
@@ -119,5 +124,6 @@ terminate(Reason, _State) ->
     lager:emergency("TERMINATING ~p", [Reason]),
     ok.
 
-code_change(_OldVsn, State, _Extra) ->
+code_change(OldVsn, State, Extra) ->
+    lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     {ok, State}.
