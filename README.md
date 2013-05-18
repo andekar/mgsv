@@ -1,5 +1,8 @@
 mgsv
 ====
+Delete user debts
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_user_debt -d "[{\"request_by\":\"anders@gmail.com\"}, {\"uid\":\"robert.f@gmail.com\"}]"
+
 Delete debt
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"61c1e712-6f4c-4deb-8c9c-bb4276d65f07\"}]"
 

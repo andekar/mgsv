@@ -50,9 +50,13 @@
 -define(REASON, <<"reason">>).
 -define(REASON(Reason), {?REASON, Reason}).
 
-%% Time stamp of time when the debt was added
+%% Time stamp of time when the debt was created
 -define(TIMESTAMP, <<"timestamp">>).
 -define(TIMESTAMP(TimeStamp), {?TIMESTAMP, TimeStamp}).
+
+%% Time stamp of the time when the debt was added to the db
+-define(SERVER_TIMESTAMP, <<"server_timestamp">>).
+-define(SERVER_TIMESTAMP(TimeStamp), {?SERVER_TIMESTAMP, TimeStamp}).
 
 %% Status to return to client usually <<"ok">>
 -define(STATUS, <<"status">>).
@@ -94,6 +98,11 @@
 -define(LOCAL_USER, <<"local">>).
 -define(GMAIL_USER, <<"gmail">>).
 -define(FACEBOOK_USER, <<"facebook">>).
+-define(PHONE_NUMBER_USER, <<"phonenumber">>).
+
+-define(CURRENCY, <<"currency">>).
+-define(CURRENCY(Curr), {?CURRENCY, Curr}).
+-define(SWEDISH_CRONA, <<"SEK">>).
 
 %% this is a list of extra info possible to add to some requests
 %% for example currencies would be possible to add here
@@ -108,6 +117,22 @@
 
 -define(APPROVED_DEBTS, approved_debts).
 -define(APPROVED_DEBTS(Props), proplists:get_value(?APPROVED_DEBTS, Props, [])).
+
+%% the debt transaction contains
+%% {Uuid, Proplist}
+%% Where Proplist contains
+%% {?UUID, Uuid}  - a unique id for this debt, this is also the key
+%% {?UID1, Uid1} - userid of the first person in this transaction
+%% {?UID2, Uid2} - userid of the second person in this transaction
+%% {?TIMESTAMP, TimeStamp} - the given timestamp, if none is provided then ServerTimeStamp
+%% {?SERVER_TIMESTAMP, ServerTimeStamp} - the timestamp when the transaction was synced
+%% {?REASON, Reason} - The reason of the transaction
+%% {?AMOUNT, Amount} - The Amount in the transaction
+%% {?CURRENCY, Currency} - The currency of amount
+%% {?ORG_CURRENCY, Currency} - the original currency
+%% {?ORG_AMOUNT, OrgAmount} - the amount in the original currency
+-define(DEBT_TRANSACTIONS, debt_transactions).
+-define(DEBT_TRANSACTIONS(Props), proplists:get_value(?DEBT_TRANSACTIONS, Props, [])).
 
 %% to lower and check @
 -define(UID_TO_LOWER(User), list_to_binary(string:to_lower(binary_to_list(User)))).

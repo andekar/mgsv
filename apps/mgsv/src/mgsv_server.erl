@@ -36,14 +36,7 @@ handle_call({["users"], Uids}, _From, State) ->
 
 %register user
 handle_call({["register"], Struct}, _From, State) ->
-    [{_, Uid}] = proplists:lookup_all(?UID, Struct),
-    [{_, Name}] = proplists:lookup_all(<<"name">>, Struct),
-    [{_, UserType}] = case proplists:lookup_all(?USER_TYPE, Struct) of
-                          [] -> [{?USER_TYPE, ?GMAIL_USER}];
-                          Other -> Other
-                      end,
-    lager:info("Registering user ~p with uid ~p", [Name, Uid]),
-    pay_server:register_user(Name, Uid, UserType),
+    pay_server:register_user(Struct),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 %delete debt
@@ -52,13 +45,13 @@ handle_call({["delete_debt"], Struct}, _From, State) ->
     _Reply = lists:map(fun({?UUID, Vars}) ->
                                lager:info("Deleting: ~p", [Vars]),
                                pay_server:delete_debt({delete_debt, ReqBy, Vars})
-                               end, proplists:delete(?REQUEST_BY, Struct)),
+                       end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 handle_call({["delete_user_debt"], Struct}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
-    [{_,Uuid}] = proplists:lookup_all(?UUID, Struct),
-    pay_server:remove_user_debt(Uuid,ReqBy),
+    [{_,Uid}] = proplists:lookup_all(?UID, Struct),
+    pay_server:remove_user_debt(Uid,ReqBy),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 handle_call({["transfer_debts"], Struct}, _From, State) ->
@@ -70,32 +63,22 @@ handle_call({["transfer_debts"], Struct}, _From, State) ->
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
 handle_call(["users"], _From, State) ->
-    Return = lists:map(fun({Uuid, User, UserType}) ->
-                       ?JSONSTRUCT([?UID(Uuid), ?USER(User), ?USER_TYPE(UserType)]) end,
+    Return = lists:map(fun(PropList) ->
+                       ?JSONSTRUCT(PropList) end,
                        pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
 handle_call(["user_debt", User], _From, State) ->
-    Return = lists:map(fun({P1,P2,Amount}) ->
-                           ?JSONSTRUCT([?DEBT([ ?UID1(P1)
-                                              , ?UID2(P2)
-                                              , ?AMOUNT(Amount)
-                                                              ])]) end,
-                                                     pay_server:get_user_debt(list_to_binary(User))),
+    Return = lists:map(fun({_Key,List}) ->
+                               ?JSONSTRUCT([?DEBT(List)]) end,
+                       pay_server:get_user_debt(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
 handle_call(["user_transactions", User], _From, State) ->
-    Return = lists:map(fun({Uuid, P1, P2, TimeStamp, Reason, Amount, Misc}) ->
-                           ?JSONSTRUCT([?DEBT([ ?UUID(Uuid)
-                                              , ?UID1(P1)
-                                              , ?UID2(P2)
-                                              , ?TIMESTAMP(TimeStamp)
-                                              , ?REASON(Reason)
-                                              , ?AMOUNT(Amount)
-                                              , Misc
-                                                              ])]) end,
-                                                     pay_server:get_user_transactions(list_to_binary(User))),
+    Return = lists:map(fun(List) ->
+                               ?JSONSTRUCT([?DEBT(List)]) end,
+                       pay_server:get_user_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
