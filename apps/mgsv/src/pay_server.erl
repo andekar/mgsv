@@ -178,7 +178,6 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
              {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> fail;
              _       ->
                  add_transaction(SortedDebt, ApprovalDebt, Debts)
-%%                 add_approved_debt(Uuid, SortedDebt, ApprovalDebt, Debts)
         end,
 
     lager:debug("Inserting Debt: ~p", SortedDebt),
@@ -255,7 +254,6 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     TNewUser = verify_uid(TNewUser, Users),
 
     [] = db_w:lookup(Users, TNewUser), %% make sure we do not create duplicate users.
-%%    [{TOldUser, Username, ExtraInfo}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
     [{TOldUser, PropList}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
 
     ok = db_w:delete(Users, TOldUser),
