@@ -214,7 +214,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
 
-    add_to_earlier_debt( amount(sort_user_debt(Uid1, Uid2, Amount))
+    add_to_earlier_debt( -1* amount(sort_user_debt(Uid1, Uid2, Amount))
                        , {Uid1, Uid2}
                        , currency(Items)
                        , Debts
