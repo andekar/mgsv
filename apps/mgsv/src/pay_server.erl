@@ -345,6 +345,11 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
 
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
+    %% Check that we do not transfer to the same user
+    ok = case TOldUser of
+             TNewUser -> trying_to_transfer_to_self_error;
+             _ -> ok
+         end,
     % to make sure we transfer only uuid users we check that the id does not contain an @
     0 = string:rstr(binary_to_list(TOldUser), "@"),
 
