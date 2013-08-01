@@ -214,7 +214,11 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
 
-    add_to_earlier_debt(sort_user_debt(Uuid, Uid1, Uid2, undefined, undefined, -1 * Amount, undefined, undefined), Debts),
+    add_to_earlier_debt( amount(sort_user_debt(Uid1, Uid2, Amount))
+                       , {Uid1, Uid2}
+                       , currency(Items)
+                       , Debts
+                       ),
     lager:info("deleting debt uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
     {reply, ok, State};
 
