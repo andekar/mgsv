@@ -390,7 +390,7 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                        ok = db_w:delete(DebtTransactions, Id),
                        SwappedItems = change_uid(TNewUser, TOldUser, Items),
                        db_w:insert(DebtTransactions, {Uuid, SwappedItems}),
-                       add_to_earlier_debt(sort_user_debt(Uuid, uid1(SwappedItems), uid2(SwappedItems), undefined, undefined, amount(Items), undefined, currency(Items)), Debts),
+                       add_to_earlier_debt(sort_user_debt(Uuid, uid1(SwappedItems), uid2(SwappedItems), undefined, undefined, amount(SwappedItems), undefined, currency(Items)), Debts),
                        update_approved_debts(TNewUser, ApprovalDebt, [Uuid]);
                    _ -> ok
                end
