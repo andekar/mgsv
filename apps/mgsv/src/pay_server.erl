@@ -162,6 +162,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                               , username(User)
                                               , user_type(UserType)
                                               , currency(Currency)],
+                                       lager:debug("Adding user ~p", [username(User)]),
                                        db_w:insert(Users, {Uid, List}),
                                        {Uid, List};
                                  [Val]  -> Val
