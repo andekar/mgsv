@@ -162,7 +162,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                               , username(User)
                                               , user_type(UserType)
                                               , currency(Currency)],
-                                       lager:debug("Adding user ~p", [username(User)]),
+                                       lager:info("Adding user ~p", [username(User)]),
                                        db_w:insert(Users, {Uid, List}),
                                        {Uid, List};
                                  [Val]  -> Val
@@ -181,7 +181,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                  add_transaction(SortedDebt, ApprovalDebt, Debts)
         end,
 
-    lager:debug("Inserting Debt: ~p", SortedDebt),
+    lager:info("Inserting Debt: ~p", [SortedDebt]),
     db_w:insert(DebtTransactions, {Uuid, SortedDebt}),
     _ = case ReqBy of
             Uid1 -> pay_push_notification:notify_user(Uid2, Reason);
@@ -242,7 +242,7 @@ handle_cast({register, UserInfo}, State) ->
                                             , username(username(UserInfo))
                                             , user_type(UserType)
                                             , currency(Currency)]}),
-              lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, ?USER(UserInfo), UserType, Currency]);
+              lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, username(username(UserInfo)), UserType, Currency]);
         _  -> lager:info("User already exist")
     end,
     {noreply, State};
@@ -607,6 +607,7 @@ add_transaction(Props, ApprovalDebts, Debts) ->
     update_approved_debts(proplists:get_value(?UID2, Props), ApprovalDebts, [Uuid]).
 
 uid_to_lower(undefined) ->
+    lager:info("undefined uui"),
     undefined;
 uid_to_lower(BinString) when is_binary(BinString) ->
     list_to_binary(string:to_lower(binary_to_list(BinString)));
