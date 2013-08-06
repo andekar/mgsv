@@ -189,13 +189,22 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             _ -> pay_push_notification:notify_user(Uid1, Reason),
                  pay_push_notification:notify_user(Uid2, Reason)
         end,
-    {reply, [ ?UID1(Uid1)
+    %% this should be changed to [{paid_by:[{user}]}, {paid_for:[user,user]}]
+    {reply, [ % first user stuff
+              ?UID1(Uid1)
             , ?USER1(username(PropList1))
+            , ?USER_TYPE1(user_type(PropList1))
+
+              % second user stuff
             , ?UID2(Uid2)
             , ?USER2(username(PropList2))
+            , ?USER_TYPE2(user_type(PropList2))
+
+            %% DEBT stuff
             , ?UUID(Uuid)
             , ?REASON(Reason)
             , ?AMOUNT(Amount)
+            , ?CURRENCY(Currency)
             , ?TIMESTAMP(TimeStamp)
             , ?STATUS(<<"ok">>)
             , Misc] ++ EchoUuid, State};
@@ -224,7 +233,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->
-    lager:alert("Handle unknown call ~p", Request),
+    lager:alert("Handle unknown call ~p", [Request]),
     {reply, ok, State}.
 
 handle_cast({register, UserInfo}, State) ->
@@ -401,11 +410,11 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->
-    lager:alert("Handle unknown cast ~p", Msg),
+    lager:alert("Handle unknown cast ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Msg, State) ->
-    lager:alert("Handle unknown info ~p", Msg),
+    lager:alert("Handle unknown info ~p", [Msg]),
     {noreply, State}.
 
 terminate(Reason, State) ->
