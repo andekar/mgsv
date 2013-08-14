@@ -18,7 +18,7 @@ curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/del
 return "ok"
 
 -- register user(s)
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/register -d "[{\"uid\":\"robert.f@gmail.com\"},{\"name\":\"Robert\"}]"
+curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/register -d "[{\"uid\":\"robert.f@gmail.com\"},{\"name\":\"Robert\"}, {\"usertype\":\"gmail\"}, {\"currency\":\"SEK\"}]"
 [
     {
         "uid": "robert.f@gmail.com"

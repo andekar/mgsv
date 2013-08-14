@@ -169,6 +169,11 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                              end,
                             {Uid, PropList} end,
                     [{?USER1, ?UID1}, {?USER2, ?UID2}]),
+    %Check uid1 != uid2
+    ok = case Uid1 of
+             Uid2 -> can_not_add_debt_to_self;
+             _ -> ok
+         end,
     SortedDebt = sort_user_debt(Uid1, Uid2, Amount)
                  ++ get_and_check_props([?REASON], Struct) ++ [ {?TIMESTAMP, TimeStamp}
                                                     , {?CURRENCY, Currency}
@@ -176,7 +181,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
     ok = case { proplists:lookup(?USER_TYPE, PropList1)
               , proplists:lookup(?USER_TYPE, PropList2)} of
              %don't add debts between two localusers
-             {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> fail;
+             {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
              _       ->
                  add_transaction(SortedDebt, ApprovalDebt, Debts)
         end,
