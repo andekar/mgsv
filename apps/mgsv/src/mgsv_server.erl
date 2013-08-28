@@ -82,6 +82,12 @@ handle_call(["user_transactions", User], _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
+handle_call(["username", Struct], _From, State) ->
+    [{_, UserId}] = proplists:lookup_all(?UID, Struct),
+    [{_, UserName}] = proplists:lookup_all(?USER),
+    pay_server:change_username(UserId, UserName),
+    {reply, {ok, <<"ok">>}, State};
+
 handle_call({["ios_token"], Struct}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Struct),
