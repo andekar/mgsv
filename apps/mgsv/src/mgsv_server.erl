@@ -84,7 +84,7 @@ handle_call(["user_transactions", User], _From, State) ->
 
 handle_call({["username"], Struct}, _From, State) ->
     [{_, UserId}] = proplists:lookup_all(?UID, Struct),
-    [{_, UserName}] = proplists:lookup_all(?USER),
+    [{_, UserName}] = proplists:lookup_all(?USER, Struct),
     pay_server:change_username(UserId, UserName),
     {reply, {ok, <<"ok">>}, State};
 
