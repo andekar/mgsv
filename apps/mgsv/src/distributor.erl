@@ -21,21 +21,26 @@ content_types_accepted(RD, Ctx) ->
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
 from_json(ReqData, Context) ->
+    Scheme = ReqData#wm_reqdata.scheme,
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
-    error_logger:info_msg("JSon received ~p at url ~p",[Any, Url]),
     Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
-    error_logger:info_msg("Decoded to ~p", [Decoded]),
-    {ok, Result} = mgsv_server:send_message({Url, Decoded}),
+    Reply = case validate_replace_request_by(Decoded, Scheme) of
+                {ok, Props} -> error_logger:info_msg("Decoded to ~p", [Decoded]),
+                               {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
+                               Result;
+                _ -> mochijson2:encode([{error, user_not_authenticated}])
+            end,
 
-    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Result)]),
-    {HBody, wrq:set_resp_header("Content-type", "text/html", wrq:append_to_response_body(Result, ReqData)), Context}.
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
+    {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}.
 
 to_html(ReqData, Context) ->
+    Scheme = ReqData#wm_reqdata.scheme,
     {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
          Any ->
                     error_logger:info_msg("Get request received ~p",[Any]),
-                    {ok, Result} = mgsv_server:send_message(Any),
+                    {ok, Result} = mgsv_server:send_message({Any, Scheme}),
                     {Result, ReqData, Context}
         end,
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
@@ -50,4 +55,16 @@ destructify({Key, PossibleList}) ->
 destructify(Other) ->
     Other.
 
+validate_replace_request_by(Props, http) ->
+    {ok, Props};
 
+validate_replace_request_by(Props, https) ->
+    case validate_user:validate(proplists:get_value(?REQUEST_BY, Props), ?GMAIL_USER) of
+        undefined ->
+            [{error, invalid_user}];
+        User -> {ok, replace_prop(?REQUEST_BY, Props, {?REQUEST_BY, User})}
+    end.
+
+
+replace_prop(Key, List, Value) ->
+    [{Key, Value} | proplists:delete(Key, List)].

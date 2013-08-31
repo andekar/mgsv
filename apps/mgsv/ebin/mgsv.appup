@@ -2,6 +2,7 @@
 {"0.3.2", [{"0.3.1", [
                   {update, distributor},
                   {load_module, pay_push_notification},
+                  {load_module, validate_user},
                   {update, mgsv_sup, supervisor},
                   {apply, {supervisor, restart_child, [mgsv_sup, pay_push_notification]}},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
