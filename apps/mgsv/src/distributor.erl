@@ -64,7 +64,7 @@ validate_replace_request_by(Props, https) ->
         Val -> case validate_user:validate(Val, ?GMAIL_USER) of
                    undefined ->
                        [{error, invalid_user}];
-                   User -> {ok, replace_prop(?REQUEST_BY, Props, {?REQUEST_BY, User})}
+                   User -> {ok, replace_prop(?REQUEST_BY, Props, User)}
                end
     end.
 
