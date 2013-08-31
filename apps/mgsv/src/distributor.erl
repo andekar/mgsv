@@ -26,12 +26,12 @@ from_json(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
     Reply = case validate_replace_request_by(Decoded, Scheme) of
-                {ok, Props} -> error_logger:info_msg("Decoded to ~p", [Decoded]),
+                {ok, Props} -> error_logger:info_msg("Decoded to ~p", [Props]),
                                {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
                                Result;
                 _ -> mochijson2:encode([{error, user_not_authenticated}])
             end,
-
+    error_logger:info_msg("replying ~p",[Reply]),
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
     {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}.
 
@@ -59,10 +59,13 @@ validate_replace_request_by(Props, http) ->
     {ok, Props};
 
 validate_replace_request_by(Props, https) ->
-    case validate_user:validate(proplists:get_value(?REQUEST_BY, Props), ?GMAIL_USER) of
-        undefined ->
-            [{error, invalid_user}];
-        User -> {ok, replace_prop(?REQUEST_BY, Props, {?REQUEST_BY, User})}
+    case proplists:get_value(?REQUEST_BY, Props) of
+        undefined -> [{error, missing_request_by}];
+        Val -> case validate_user:validate(Val, ?GMAIL_USER) of
+                   undefined ->
+                       [{error, invalid_user}];
+                   User -> {ok, replace_prop(?REQUEST_BY, Props, {?REQUEST_BY, User})}
+               end
     end.
 
 
