@@ -162,7 +162,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                               , username(User)
                                               , user_type(UserType)
                                               , currency(Currency)],
-                                       lager:info("Adding user ~p", [username(User)]),
+                                       lager:info("ADD user ~p", [username(User)]),
                                        db_w:insert(Users, {Uid, List}),
                                        {Uid, List};
                                  [Val]  -> Val
@@ -234,7 +234,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
                        , currency(Items)
                        , Debts
                        ),
-    lager:info("deleting debt uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
+    lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
     {reply, ok, State};
 
 handle_call(Request, _From, State) ->

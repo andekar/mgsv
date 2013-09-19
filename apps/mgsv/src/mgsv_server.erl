@@ -43,7 +43,7 @@ handle_call({["register"], Struct, _Scheme}, _From, State) ->
 handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     _Reply = lists:map(fun({?UUID, Vars}) ->
-                               lager:info("Deleting: ~p", [Vars]),
+                               lager:info("delete_debt: ~p", [Vars]),
                                pay_server:delete_debt({delete_debt, ReqBy, Vars})
                        end, proplists:delete(?REQUEST_BY, Struct)),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
@@ -58,7 +58,7 @@ handle_call({["transfer_debts"], Struct, https}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Struct),
     [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Struct),
-    lager:info("transfer debt from OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
+    lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
     pay_server:transfer_debts(OldUid, NewUid, ReqBy),
     {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
 
