@@ -34,9 +34,9 @@ from_json(ReqData, Context) ->
                                catch
                                    _:Error ->
                                        lager:alert("CRASH ~p", [Error]),
-                                       mochijson2:encode([{error,request_failed}])
+                                       mochijson2:encode([[{error,request_failed}]])
                                end;
-                    _ -> mochijson2:encode([{error, user_not_authenticated}])
+                    _ -> mochijson2:encode([[{error, user_not_authenticated}]])
                 end,
     error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
@@ -52,7 +52,7 @@ to_html(ReqData, Context) ->
                                                catch
                                                    _:Err ->
                                                        lager:alert("CRASH ~p", [Err]),
-                                                       mochijson2:encode([{error,request_failed}])
+                                                       mochijson2:encode([[{error,request_failed}]])
                                                end,
                                 {Result, ReqData, Context}
                         end,
