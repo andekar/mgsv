@@ -37,7 +37,7 @@ handle_call({["users"], Uids, _Scheme}, _From, State) ->
 %register user
 handle_call({["register"], Struct, _Scheme}, _From, State) ->
     pay_server:register_user(Struct),
-    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 %delete debt
 handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
@@ -46,13 +46,13 @@ handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
                                lager:info("delete_debt: ~p", [Vars]),
                                pay_server:delete_debt({delete_debt, ReqBy, Vars})
                        end, proplists:delete(?REQUEST_BY, Struct)),
-    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["delete_user_debt"], Struct, _Scheme}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,Uid}] = proplists:lookup_all(?UID, Struct),
     pay_server:remove_user_debt(Uid,ReqBy),
-    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["transfer_debts"], Struct, https}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
@@ -60,7 +60,7 @@ handle_call({["transfer_debts"], Struct, https}, _From, State) ->
     [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Struct),
     lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
     pay_server:transfer_debts(OldUid, NewUid, ReqBy),
-    {reply, {ok, mochijson2:encode(<<"ok">>)}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["users"], _Scheme}, _From, State) ->
     Return = lists:map(fun(PropList) ->
@@ -100,21 +100,21 @@ handle_call({["username"], Struct, https}, _From, State) ->
     [{_, UserId}] = proplists:lookup_all(?UID, Struct),
     [{_, UserName}] = proplists:lookup_all(?USER, Struct),
     pay_server:change_username(UserId, UserName),
-    {reply, {ok, <<"ok">>}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["ios_token"], Struct, https}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Struct),
     pay_push_notification:add_user_ios(ReqBy, IosToken),
-    {reply, {ok, <<"ok">>}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["clear_badges", User], https}, _From, State) ->
     pay_push_notification:clear_counter(list_to_binary(string:to_lower(User))),
-    {reply, {ok, <<"ok">>}, State};
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
-    {reply, {ok, <<"ok">>}, State}.
+    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}.
 
 handle_cast(Request, State) ->
     lager:alert("Handle unknown cast ~p", [Request]),
