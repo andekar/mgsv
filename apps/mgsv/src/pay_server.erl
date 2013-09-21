@@ -148,6 +148,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
     Amount = proplists:get_value(?AMOUNT, Struct),
     Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
+    ServerTimeStamp = server_timestamp(get_timestamp()),
     EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
     Misc = ?MISC(proplists:get_value(?MISC, Struct, [])),
     ReqBy = ?UID_TO_LOWER(TReqBy),
@@ -163,8 +164,9 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                        List = [ uid(Uid)
                                               , username(User)
                                               , user_type(UserType)
-                                              , currency(Currency)],
-                                       lager:info("ADD user ~p", [username(User)]),
+                                              , currency(Currency)
+                                              , ServerTimeStamp],
+%                                       lager:info("ADD user ~p", [username(User)]),
                                        db_w:insert(Users, {Uid, List}),
                                        {Uid, List};
                                  [Val]  -> Val
@@ -177,9 +179,10 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
              _ -> ok
          end,
     SortedDebt = sort_user_debt(Uid1, Uid2, Amount)
-                 ++ get_and_check_props([?REASON], Struct) ++ [ {?TIMESTAMP, TimeStamp}
+                 ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
                                                     , {?CURRENCY, Currency}
-                                                    , {?UUID, Uuid}],
+                                                    , {?UUID, Uuid}
+                                                    , ServerTimeStamp],
     ok = case { proplists:lookup(?USER_TYPE, PropList1)
               , proplists:lookup(?USER_TYPE, PropList2)} of
              %don't add debts between two localusers
@@ -212,7 +215,8 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             , ?REASON(Reason)
             , ?AMOUNT(Amount)
             , ?CURRENCY(Currency)
-            , ?TIMESTAMP(TimeStamp)
+            , timestamp(TimeStamp)
+            , ServerTimeStamp
             , ?STATUS(<<"ok">>)
             , Misc] ++ EchoUuid, State};
 
@@ -258,7 +262,7 @@ handle_cast({register, UserInfo}, State) ->
                                             , username(username(UserInfo))
                                             , user_type(UserType)
                                             , currency(Currency)
-                                            , timestamp(get_timestamp())]}),
+                                            , server_timestamp(get_timestamp())]}),
               lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, username(username(UserInfo)), UserType, Currency]);
         _  -> lager:info("User already exist")
     end,
@@ -450,12 +454,12 @@ code_change(OldVsn, State, "0.3.2") ->
                                                      , username(Username)
                                                      , user_type(?LOCAL_USER)
                                                      , currency(?SWEDISH_CRONA)
-                                                     , timestamp(get_timestamp())]});
+                                                     , server_timestamp(get_timestamp())]});
                           _ -> db_w:insert(B, {Uuid, [ uid(Uuid)
                                                      , username(Username)
                                                      , user_type(?GMAIL_USER)
                                                      , currency(?SWEDISH_CRONA)
-                                                     , timestamp(get_timestamp())]})
+                                                     , server_timestamp(get_timestamp())]})
                       end,
                   continue
                   end),
@@ -465,7 +469,7 @@ code_change(OldVsn, State, "0.3.2") ->
                                          , [ {?UUID, Uuid}
                                          , {?UID1, Uid1}
                                          , {?UID2, Uid2}
-                                         , {?TIMESTAMP, Time}
+                                         , timestamp(Time)
                                          , {?SERVER_TIMESTAMP, get_timestamp()}
                                          , {?REASON, Reason}
                                          , {?AMOUNT, Amount}
@@ -685,6 +689,9 @@ currency(Arg) ->
 
 timestamp(Arg) ->
     props(?TIMESTAMP, Arg).
+
+server_timestamp(Arg) ->
+    props(?SERVER_TIMESTAMP, Arg).
 
 user_type(Arg) ->
     props(?USER_TYPE, Arg).
