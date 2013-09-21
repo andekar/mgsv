@@ -34,7 +34,7 @@ from_json(ReqData, Context) ->
                                catch
                                    _:Error ->
                                        lager:alert("CRASH ~p", [Error]),
-                                       Replied = [{error,request_failed}],
+                                       Replied = mochijson2:encode([{error,request_failed}]),
                                        error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),
                                        Replied
                                       % HBody2 = io_lib:format("~s~n", [erlang:iolist_to_binary(Replied)]),
@@ -50,30 +50,21 @@ from_json(ReqData, Context) ->
 
 to_html(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
-    try
-        {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
-                                Any ->
-                                    error_logger:info_msg("GET ~p",[Any]),
-                                    {ok, Result} = try mgsv_server:send_message({Any, Scheme})
-                                                   catch
-                                                       _:Err ->
-                                                           lager:alert("CRASH ~p", [Err]),
-                                                           [{error,request_failed}]
-                                                   end,
-                                    {Result, ReqData, Context}
-                            end,
-        error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)]),
+    {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
+                            Any ->
+                                error_logger:info_msg("GET ~p",[Any]),
+                                {ok, Result} = try mgsv_server:send_message({Any, Scheme})
+                                               catch
+                                                   _:Err ->
+                                                       lager:alert("CRASH ~p", [Err]),
+                                                       mochijson2:encode([{error,request_failed}])
+                                               end,
+                                {Result, ReqData, Context}
+                        end,
+    error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)]),
 
-        HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
-        {HBody, ReqData, Ctx2}
-    catch
-        _:Error ->
-            lager:alert("CRASH ~p", [Error]),
-            Replied = [{error,request_failed}],
-            error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),
-            HBody2 = io_lib:format("~s~n", [erlang:iolist_to_binary(Replied)]),
-            {HBody2, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Replied, ReqData)), Context}
-    end.
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
+    {HBody, ReqData, Ctx2}.
 
 destructify(List) when is_list(List)->
     lists:map(fun destructify/1, List);
