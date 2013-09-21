@@ -25,24 +25,27 @@ from_json(ReqData, Context) ->
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
     Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
-    try
-        Reply = case validate_replace_request_by(Decoded, Scheme) of
-                    {ok, Props} -> error_logger:info_msg("PUT ~p", [Props]),
+
+    Reply = case validate_replace_request_by(Decoded, Scheme) of
+                {ok, Props} -> error_logger:info_msg("PUT ~p", [Props]),
+                               try
                                    {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
-                                   Result;
+                                   Result
+                               catch
+                                   _:Error ->
+                                       lager:alert("CRASH ~p", [Error]),
+                                       Replied = [{error,request_failed}],
+                                       error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),
+                                       Replied
+                                      % HBody2 = io_lib:format("~s~n", [erlang:iolist_to_binary(Replied)]),
+
+                                       %{HBody2, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Replied, ReqData)), Context}
+                               end;
                     _ -> mochijson2:encode([{error, user_not_authenticated}])
                 end,
-        error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
-        HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
-        {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}
-    catch
-        Error ->
-            lager:alert("CRASH ~p", [Error]),
-            Replied = [{error,request_failed}],
-            error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),
-            HBody2 = io_lib:format("~s~n", [erlang:iolist_to_binary(Replied)]),
-            {HBody2, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Replied, ReqData)), Context}
-    end.
+    error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
+    {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}.
 
 
 to_html(ReqData, Context) ->
@@ -51,7 +54,12 @@ to_html(ReqData, Context) ->
         {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
                                 Any ->
                                     error_logger:info_msg("GET ~p",[Any]),
-                                    {ok, Result} = mgsv_server:send_message({Any, Scheme}),
+                                    {ok, Result} = try mgsv_server:send_message({Any, Scheme})
+                                                   catch
+                                                       _:Err ->
+                                                           lager:alert("CRASH ~p", [Err]),
+                                                           [{error,request_failed}]
+                                                   end,
                                     {Result, ReqData, Context}
                             end,
         error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)]),
@@ -59,7 +67,7 @@ to_html(ReqData, Context) ->
         HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
         {HBody, ReqData, Ctx2}
     catch
-        Error ->
+        _:Error ->
             lager:alert("CRASH ~p", [Error]),
             Replied = [{error,request_failed}],
             error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),

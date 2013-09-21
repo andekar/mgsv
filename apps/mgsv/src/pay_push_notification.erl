@@ -107,7 +107,7 @@ handle_cast(All, State) ->
     {noreply, State}.
 
 handle_info(Msg, State) ->
-    lager:alert("Handle unknown info ~p", Msg),
+    lager:alert("Handle unknown info ~p", [Msg]),
     {noreply, State}.
 
 terminate(Reason, State) ->
