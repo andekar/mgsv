@@ -82,6 +82,20 @@ handle_call({["user_transactions", User], _Scheme}, _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
+handle_call({["user_transactions", User, Num], _Scheme}, _From, State) ->
+    Transactions = pay_server:get_user_transactions(list_to_binary(User)),
+    Sorted = lists:sort(fun(T1,T2) ->
+                                DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
+                                DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
+                                DT1 =< DT2 end,
+                        Transactions),
+    {PNum, []} = string:to_integer(Num),
+    Return = lists:map(fun(List) ->
+                               ?JSONSTRUCT([?DEBT(List)]) end,
+                       lists:sublist(Sorted, PNum)),
+    Return2 = mochijson2:encode(Return),
+    {reply, {ok, Return2}, State};
+
 handle_call({["username"], Struct, https}, _From, State) ->
     [{_, UserId}] = proplists:lookup_all(?UID, Struct),
     [{_, UserName}] = proplists:lookup_all(?USER, Struct),
