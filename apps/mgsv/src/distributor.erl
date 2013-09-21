@@ -27,19 +27,14 @@ from_json(ReqData, Context) ->
     Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
 
     Reply = case validate_replace_request_by(Decoded, Scheme) of
-                {ok, Props} -> error_logger:info_msg("PUT ~p", [Props]),
+                {ok, Props} -> error_logger:info_msg("PUT ~p ~p", [Url, Props]),
                                try
                                    {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
                                    Result
                                catch
                                    _:Error ->
                                        lager:alert("CRASH ~p", [Error]),
-                                       Replied = mochijson2:encode([{error,request_failed}]),
-                                       error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Replied)]),
-                                       Replied
-                                      % HBody2 = io_lib:format("~s~n", [erlang:iolist_to_binary(Replied)]),
-
-                                       %{HBody2, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Replied, ReqData)), Context}
+                                       mochijson2:encode([{error,request_failed}])
                                end;
                     _ -> mochijson2:encode([{error, user_not_authenticated}])
                 end,

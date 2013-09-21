@@ -125,6 +125,8 @@ handle_call({user_exists, Uid}, _From, State) ->
 
 handle_call({get_usernames, Uids}, _From, State) ->
     Users = proplists:get_value(?USERS, State),
+    RecUsers = lists:filter(fun({?UID, _}) -> true;
+                               (_) -> false end, Uids),
     RetUsers = lists:map(fun({?UID, TUid}) ->
                       Uid = ?UID_TO_LOWER(TUid),
                       case db_w:lookup(Users, Uid) of
@@ -132,7 +134,7 @@ handle_call({get_usernames, Uids}, _From, State) ->
                           [{Uid, PropList}] ->
                               ?JSONSTRUCT(PropList)
                       end
-              end, Uids),
+              end, RecUsers),
     {reply, RetUsers, State};
 
 handle_call({add, TReqBy, Struct}, _From, State) ->
@@ -255,7 +257,8 @@ handle_cast({register, UserInfo}, State) ->
         [] -> db_w:insert(Users, {UidLower, [ uid(UidLower)
                                             , username(username(UserInfo))
                                             , user_type(UserType)
-                                            , currency(Currency)]}),
+                                            , currency(Currency)
+                                            , timestamp(get_timestamp())]}),
               lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, username(username(UserInfo)), UserType, Currency]);
         _  -> lager:info("User already exist")
     end,
@@ -446,11 +449,13 @@ code_change(OldVsn, State, "0.3.2") ->
                           0 -> db_w:insert(B, {Uuid, [ uid(Uuid)
                                                      , username(Username)
                                                      , user_type(?LOCAL_USER)
-                                                     , currency(?SWEDISH_CRONA)]});
+                                                     , currency(?SWEDISH_CRONA)
+                                                     , timestamp(get_timestamp())]});
                           _ -> db_w:insert(B, {Uuid, [ uid(Uuid)
                                                      , username(Username)
                                                      , user_type(?GMAIL_USER)
-                                                     , currency(?SWEDISH_CRONA)]})
+                                                     , currency(?SWEDISH_CRONA)
+                                                     , timestamp(get_timestamp())]})
                       end,
                   continue
                   end),
@@ -677,6 +682,9 @@ uid2(Arg) ->
 
 currency(Arg) ->
     props(?CURRENCY, Arg).
+
+timestamp(Arg) ->
+    props(?TIMESTAMP, Arg).
 
 user_type(Arg) ->
     props(?USER_TYPE, Arg).
