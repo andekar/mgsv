@@ -42,10 +42,11 @@ handle_call({["register"], Struct, _Scheme}, _From, State) ->
 %delete debt
 handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
+    Uuids = proplists:lookup_all(?UUID, Struct),
     _Reply = lists:map(fun({?UUID, Vars}) ->
                                lager:info("delete_debt: ~p", [Vars]),
                                pay_server:delete_debt({delete_debt, ReqBy, Vars})
-                       end, proplists:delete(?REQUEST_BY, Struct)),
+                       end, Uuids),
     {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["delete_user_debt"], Struct, _Scheme}, _From, State) ->
