@@ -145,12 +145,13 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
 
     Uuid = binary_uuid(),
     Reason = proplists:get_value(?REASON, Struct),
-    Amount = proplists:get_value(?AMOUNT, Struct),
-    Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
+%    Amount = proplists:get_value(?AMOUNT, Struct),
+    {Amount, Currency} = p_amount_currency(Struct),
+%    Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
     ServerTimeStamp = server_timestamp(get_timestamp()),
     EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
-    Misc = ?MISC(proplists:get_value(?MISC, Struct, [])),
+    Misc = ?MISC(proplists:get_value(?MISC, Struct, [])), %% Todo remove
     ReqBy = ?UID_TO_LOWER(TReqBy),
 
     %% per user
@@ -182,7 +183,9 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                  ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
                                                     , {?CURRENCY, Currency}
                                                     , {?UUID, Uuid}
-                                                    , ServerTimeStamp],
+                                                    , ServerTimeStamp]
+                                                    ++ proplists:lookup_all(?REG_DEBT, Struct)
+        ++ proplists:lookup_all(?ORG_DEBT, Struct),
     ok = case { proplists:lookup(?USER_TYPE, PropList1)
               , proplists:lookup(?USER_TYPE, PropList2)} of
              %don't add debts between two localusers
@@ -213,12 +216,14 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             %% DEBT stuff
             , ?UUID(Uuid)
             , ?REASON(Reason)
-            , ?AMOUNT(Amount)
-            , ?CURRENCY(Currency)
+            , ?AMOUNT(Amount)     %% saved for backwardscompability
+            , ?CURRENCY(Currency) %% saved for backwardscompability
             , timestamp(TimeStamp)
             , ServerTimeStamp
             , ?STATUS(<<"ok">>)
-            , Misc] ++ EchoUuid, State};
+            , Misc] ++ EchoUuid ++ proplists:lookup_all(?REG_DEBT, Struct)
+                    ++ proplists:lookup_all(?ORG_DEBT, Struct)
+       , State};
 
 %% should we send a notification to the other part?
 handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
@@ -473,7 +478,10 @@ code_change(OldVsn, State, "0.3.2") ->
                                          , {?SERVER_TIMESTAMP, get_timestamp()}
                                          , {?REASON, Reason}
                                          , {?AMOUNT, Amount}
-                                         , {?CURRENCY, ?SWEDISH_CRONA}]}),
+                                         , {?CURRENCY, ?SWEDISH_CRONA}
+                                         , {?REG_DEBT, [ amount(Amount)
+                                                       , currency(?SWEDISH_CRONA)]}
+                                           ]}),
                   continue
                   end),
     db_w:traverse(Debts,
@@ -671,6 +679,16 @@ change_uid(NewUid, OldUid, Items) ->
                 ++ ClearedItems
     end.
 
+p_amount_currency(Struct) ->
+    List =
+        case proplists:get_value(?AMOUNT, Struct) of
+            undefined ->
+                proplists:get_value(?REG_DEBT, Struct);
+            _ ->Struct
+        end,
+    Currency = proplists:get_value(?CURRENCY, List, ?SWEDISH_CRONA), %% Default to SEK for now
+    {?AMOUNT  , Amount}   = proplists:lookup(?AMOUNT, List),
+    {Amount, Currency}.
 
 amount(Arg) ->
     props(?AMOUNT, Arg).

@@ -111,6 +111,16 @@
 -define(CURRENCY(Curr), {?CURRENCY, Curr}).
 -define(SWEDISH_CRONA, <<"SEK">>).
 
+%% contains currency and amount of the original
+%% currency, this one is mandatory
+-define(ORG_DEBT, <<"org_debt">>).
+-define(ORG_DEBT(Data), {?ORG_DEBT, Data}).
+
+%% contains currency and amount of the registered
+%% currency, this one is not mandatory
+-define(REG_DEBT, <<"reg_debt">>).
+-define(REG_DEBT(Data), {?REG_DEBT, Data}).
+
 %% this is a list of extra info possible to add to some requests
 %% for example currencies would be possible to add here
 -define(MISC, <<"misc">>).
