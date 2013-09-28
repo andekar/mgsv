@@ -118,14 +118,8 @@
 
 %% contains currency and amount of the registered
 %% currency, this one is not mandatory
--define(REG_DEBT, <<"reg_debt">>).
--define(REG_DEBT(Data), {?REG_DEBT, Data}).
-
-%% this is a list of extra info possible to add to some requests
-%% for example currencies would be possible to add here
--define(MISC, <<"misc">>).
--define(MISC(List), {?MISC, List}).
-
+%-define(REG_DEBT, <<"reg_debt">>).
+%-define(REG_DEBT(Data), {?REG_DEBT, Data}).
 
 %% {Uuid, [{?APPROVED_DEBTS, [Uids]}, {?NOT_APPROVED_DEBTS, [{Uid, [{approved_by|not_approved_by, Uid}]}|...]}] }
 %% That is Uuid = userid, Uids = debt_ids

@@ -145,13 +145,11 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
 
     Uuid = binary_uuid(),
     Reason = proplists:get_value(?REASON, Struct),
-%    Amount = proplists:get_value(?AMOUNT, Struct),
-    {Amount, Currency} = p_amount_currency(Struct),
-%    Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
+    Amount = proplists:get_value(?AMOUNT, Struct),
+    Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
     TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
     ServerTimeStamp = server_timestamp(get_timestamp()),
     EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
-    Misc = ?MISC(proplists:get_value(?MISC, Struct, [])), %% Todo remove
     ReqBy = ?UID_TO_LOWER(TReqBy),
 
     %% per user
@@ -184,8 +182,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                                     , {?CURRENCY, Currency}
                                                     , {?UUID, Uuid}
                                                     , ServerTimeStamp]
-                                                    ++ proplists:lookup_all(?REG_DEBT, Struct)
-        ++ proplists:lookup_all(?ORG_DEBT, Struct),
+                                      ++ proplists:lookup_all(?ORG_DEBT, Struct),
     ok = case { proplists:lookup(?USER_TYPE, PropList1)
               , proplists:lookup(?USER_TYPE, PropList2)} of
              %don't add debts between two localusers
@@ -221,7 +218,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             , timestamp(TimeStamp)
             , ServerTimeStamp
             , ?STATUS(<<"ok">>)
-            , Misc] ++ EchoUuid ++ proplists:lookup_all(?REG_DEBT, Struct)
+            ] ++ EchoUuid
                     ++ proplists:lookup_all(?ORG_DEBT, Struct)
        , State};
 
@@ -236,7 +233,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     db_w:delete(DebtTransactions, Uuid),
     Uid1 = proplists:get_value(?UID1, Items),
     Uid2 = proplists:get_value(?UID2, Items),
-    Amount = proplists:get_value(?AMOUNT, Items),
+    Amount = proplists:get_value(?AMOUNT, Items), %% TODO fix this
     remove_debt(Uid1, ApprovalDebt, Uuid),
     remove_debt(Uid2, ApprovalDebt, Uuid),
 
@@ -479,8 +476,6 @@ code_change(OldVsn, State, "0.3.2") ->
                                          , {?REASON, Reason}
                                          , {?AMOUNT, Amount}
                                          , {?CURRENCY, ?SWEDISH_CRONA}
-                                         , {?REG_DEBT, [ amount(Amount)
-                                                       , currency(?SWEDISH_CRONA)]}
                                            ]}),
                   continue
                   end),
@@ -678,17 +673,6 @@ change_uid(NewUid, OldUid, Items) ->
             sort_user_debt(get_value(?UID1, Items), NewUid, get_value(?AMOUNT, Items))
                 ++ ClearedItems
     end.
-
-p_amount_currency(Struct) ->
-    List =
-        case proplists:get_value(?AMOUNT, Struct) of
-            undefined ->
-                proplists:get_value(?REG_DEBT, Struct);
-            _ ->Struct
-        end,
-    Currency = proplists:get_value(?CURRENCY, List, ?SWEDISH_CRONA), %% Default to SEK for now
-    {?AMOUNT  , Amount}   = proplists:lookup(?AMOUNT, List),
-    {Amount, Currency}.
 
 amount(Arg) ->
     props(?AMOUNT, Arg).
