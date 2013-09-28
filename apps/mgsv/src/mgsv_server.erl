@@ -21,11 +21,12 @@ send_message(Message) ->
 %Add debts
 handle_call({[], Struct, _Scheme}, _From, State) ->
     [{_, ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
+    Debts = proplists:lookup_all(?DEBT, Struct),
     Reply = lists:map(fun({?DEBT, Vars}) ->
                               lager:debug("Add debt: ~p", [Vars]),
                                Tmp = pay_server:add_debt({add,ReqBy, Vars}),
                                ?JSONSTRUCT([{?DEBT,Tmp}])
-                               end, proplists:delete(?REQUEST_BY, Struct)),
+                               end, Debts),
     {reply, {ok, mochijson2:encode(Reply)}, State};
 
 %get users
