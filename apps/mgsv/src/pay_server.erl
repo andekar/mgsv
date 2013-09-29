@@ -467,7 +467,7 @@ code_change(OldVsn, State, "0.3.2") ->
                   end),
     db_w:traverse(DebtRecord,
                   fun({Uuid, {Uid1, Uid2}, Time, Reason, Amount}) ->
-                          ServerTimeStampStr = lists:flatten(io_lib:format("~p",[Time])),
+                          ServerTimeStampStr = inttostring(Time),
                           lager:info("~p",[Time]),
                           Fill = 16 - length(ServerTimeStampStr),
                           lager:info("~p, ~p", [Fill, ServerTimeStampStr]),
@@ -717,3 +717,8 @@ repeat(Num, _Rep, Acc) when Num == 0 ->
     Acc;
 repeat(Num, Rep, Acc) ->
     repeat(Num - 1, Rep, Rep ++ Acc).
+
+inttostring(Time) when is_binary(Time)->
+    lists:flatten(io_lib:format("~p",[binary_to_list(Time)]));
+inttostring(Time) ->
+    lists:flatten(io_lib:format("~p",[Time])).
