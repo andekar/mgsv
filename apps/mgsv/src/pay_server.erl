@@ -719,6 +719,6 @@ repeat(Num, Rep, Acc) ->
     repeat(Num - 1, Rep, Rep ++ Acc).
 
 inttostring(Time) when is_binary(Time)->
-    lists:flatten(io_lib:format("~p",[binary_to_list(Time)]));
+    binary_to_list(Time);
 inttostring(Time) ->
     lists:flatten(io_lib:format("~p",[Time])).
