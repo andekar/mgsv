@@ -468,8 +468,10 @@ code_change(OldVsn, State, "0.3.2") ->
     db_w:traverse(DebtRecord,
                   fun({Uuid, {Uid1, Uid2}, Time, Reason, Amount}) ->
                           ServerTimeStampStr = lists:flatten(io_lib:format("~p",[Time])),
+                          lager:info("~p",[Time]),
                           Fill = 16 - length(ServerTimeStampStr),
-                          ServerTimeStamp = list_to_integer(ServerTimeStampStr ++ repeat(Fill, "0", "")),
+                          lager:info("~p, ~p", [Fill, ServerTimeStampStr]),
+                          ServerTimeStamp = list_to_integer(ServerTimeStampStr ++ repeat(max(0,Fill), "0", "")),
                           db_w:insert(C, { Uuid
                                          , [ {?UUID, Uuid}
                                          , {?UID1, Uid1}
