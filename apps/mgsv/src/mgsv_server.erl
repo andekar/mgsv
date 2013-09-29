@@ -89,7 +89,7 @@ handle_call({["user_transactions", User, Num], _Scheme}, _From, State) ->
     Sorted = lists:sort(fun(T1,T2) ->
                                 DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
                                 DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
-                                DT1 =< DT2 end,
+                                DT1 >= DT2 end,
                         Transactions),
     {PNum, []} = string:to_integer(Num),
     Return = lists:map(fun(List) ->
@@ -103,7 +103,7 @@ handle_call({["user_transactions", User, From, Num], _Scheme}, _From, State) ->
     Sorted = lists:sort(fun(T1,T2) ->
                                 DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
                                 DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
-                                DT1 =< DT2 end,
+                                DT1 >= DT2 end,
                         Transactions),
     {PFrom, []} = string:to_integer(From),
     {PNum,   []} = string:to_integer(Num),
