@@ -35,26 +35,13 @@ Delete debt(s)
 **RETURN:**
 ######
 ```json
- [{status : ok}]
+ [{"status" : "ok"}]
 ```
 **or**
 ```json
- [{error, request_failed}]
+ [{"error", "request_failed"}]
 ```
 **NOTE:** this can contain several uuid to different persons
-
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"61c1e712-6f4c-4deb-8c9c-bb4276d65f07\"}]"
-
-[
-    {
-        "request_by": "jenny@gmail.com"
-    },
-    {
-        "uuid": "61c1e712-6f4c-4deb-8c9c-bb4276d65f07"
-    }
-]
-
-return "ok"
 
 Register user(s)
 ------
@@ -63,25 +50,15 @@ Register user(s)
 **DATA:**
 ######
 ```json
-      [ {request_by : anders@gmail.com}
-      , {uid        : robert.f@gmail.com}
-      , {name       : Robert}
-      , {usertype   : gmail | local | facebook}
-      , {currency   : SEK | NOK | ...}
+      [ {"request_by" : "anders@gmail.com"}
+      , {"uid"        : "robert.f@gmail.com"}
+      , {"name"       : "Robert"}
+      , {"usertype"   : "gmail" | "local" | "facebook"}
+      , {"currency"   : "SEK" | "NOK" | ...}
       ]
 ```
 **RETURN:** // TODO
 ######
--- register user(s)
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/register -d "[{\"uid\":\"robert.f@gmail.com\"},{\"name\":\"Robert\"}, {\"usertype\":\"gmail\"}, {\"currency\":\"SEK\"}]"
-[
-    {
-        "uid": "robert.f@gmail.com"
-    },
-    {
-        "name": "Robert"
-    }
-]
 
 Lookup user(s)
 ------
@@ -110,31 +87,6 @@ Lookup user(s)
  [{"error", "request_failed"}]
 ```
 
--- lookup user(s)
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/users -d "[{\"uid\":\"anders@gmail.com\"},{\"uid\":\"jenny_karlsson@live.com\"}]"
-[
-    {
-        "uid": "anders@gmail.com"
-    },
-    {
-        "uid": "jenny_karlsson@live.com"
-    }
-]
-
-response
-[
-    {
-        "uid": "anders@gmail.com",
-        "user": "Anders",
-        "user_type": "gmail|local"
-    },
-    {
-        "uid": "jenny@gmail.com",
-        "user": "jenny",
-        "user_type": "gmail|local"
-    }
-]
-
 Transfer debts
 ------
 **URL:**  transfer_debts
@@ -158,145 +110,136 @@ Transfer debts
 ```
 **NOTE:** this transfers debts between request_by and old_uuid to request_by and new_uuid where new_uuid must already exist
 
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/transfer_debts -d "[{\"request_by\":\"anders@gmail.com\"},{\"old_uid\":\"01190f79-c0f2-45f9-a2bd-b37d19b85337\"},{\"new_uid\":\"jenny@gmail.com\"}]"
+Add debts
+------
+**URL:** /
+######
+**DATA:**
+######
+```json
+	[ {"debt" :
+		   { "user1"     : "anders"            // This one is optional if uid1 is given
+		   , "uid1"      : "anders@gmail.com"  // This one is optional if user1 is given
+		   , "reason"    : "cinema ticket Riddick"
+		   , "amount"    : 100
+		   , "user2"     : "petter"            // This one is optional if uid2 is given
+		   , "uid2"      : "petter@gmail.com"  // This one is optional if user2 is given
+		   , "currency"  : "SEK" | "NOK" | ...
+		   , "timestamp" : 12346567            // seconds since 1970
+		   , "echo_uuid" : "324237483"         // any client created guid
+		   , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+		     		   , "currency" : "SEK" | "NOK" | ...
+		     		   }
+		   }
+          }
+	, {"request_by" : "anders@gmail.com"}
+ 	, ... // more debts
+	]
+```
+**RESPONSE:**
+######
+```json
+	[ {"debt" :
+		   { "user1"      : "anders"            
+		   , "uid1"       : "anders@gmail.com"  // This will be a created one if not given at input
+		   , "user_type1" : "gmail" | "local" | "facebook"
+		   , "reason"     : "cinema ticket Riddick"
+		   , "amount"     : 100
+		   , "user2"      : "petter"            
+		   , "uid2"       : "petter@gmail.com"  // This will be a created one if not given at input
+		   , "user_type2" : "gmail" | "local" | "facebook"
+		   , "currency"   : "SEK" | "NOK" | ...
+		   , "timestamp"  : 12346567            // seconds since 1970
+		   , "server_timestamp" : 12346567     // seconds since 1970
+		   , "echo_uuid"  : "324237483"         // any client created guid
+		   , "status"     : "ok"
+		   , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+		     		   , "currency" : "SEK" | "NOK" | ...
+		     		   }
+		   }
+          }
+	, {"request_by" : "anders@gmail.com"}
+ 	, ... // more debts
+	]
+```
+**or**
+```json
+	[{"error", "request_failed"}]
+```
 
-[
-    {
-        "request_by": "anders@gmail.com"
-    },
-    {
-        "old_uid": "01190f79-c0f2-45f9-a2bd-b37d19b85337"
-    },
-    {
-        "new_uid": "jenny@gmail.com"
-    }
+users /** NOTE THIS WILL BE REMOVED SOON **/
+------
+**URL:** users
+######
+**REQUEST_TYPE:** GET 
+######
+**RESPONSE:**
+######
+```json
+	  [ {"uid"       : "anders@gmail.com"}
+	  , {"user"      : "anders"}
+	  , {"user_type" : "gmail" | "local" | "facebook"}
+	  , {"currency"  : "SEK" | "NOK" | ...}
+	, ...
+	] 
+```
+**or**
+```json
+ [{"error", "request_failed"}]
+```
+
+User transactions
+------
+**URL:** user_transactions/uuid  // This will later be changed to be a PUT operation
+######
+**REQUEST_TYPE:** GET 
+######
+**RESPONSE:**
+######
+```json
+	[ {"debt" :
+		   { "user1"      : "anders"            
+		   , "uid1"       : "anders@gmail.com"  // This will be a created one if not given at input
+		   , "user_type1" : "gmail" | "local" | "facebook"
+		   , "reason"     : "cinema ticket Riddick"
+		   , "amount"     : 100
+		   , "user2"      : "petter"            
+		   , "uid2"       : "petter@gmail.com"  // This will be a created one if not given at input
+		   , "user_type2" : "gmail" | "local" | "facebook"
+		   , "currency"   : "SEK" | "NOK" | ...
+		   , "timestamp"  : 12346567            // seconds since 1970
+		   , "server_timestamp" : 12346567     // seconds since 1970
+		   , "echo_uuid"  : "324237483"         // any client created guid
+		   , "status"     : "ok"
+		   , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+		     		   , "currency" : "SEK" | "NOK" | ...
+		     		   }
+		   }
+          }
+	, {"request_by" : "anders@gmail.com"}
+ 	, ... // more debts
+	]
+```
+**or**
+```json
+	[{"error", "request_failed"}]
+```
+
+User debt
+------
+**URL:** user_debt/uuid  // This will later be changed to be a PUT operation
+######
+**REQUEST_TYPE:** GET 
+######
+**RESPONSE:**
+######
+```json
+[ { "debt" : { "uid1"     : "anders@gmail.com"
+    	     , "uid2"     : "petter@gmail.com"
+	     , "amount"   : 127
+	     , "currency" : "SEK" | "NOK" | ...
+     	     }
+  , ...
+  }
 ]
-
--- PUT
-curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp -d "[{\"debt\":{\"user1\":\"Anders\",\"uid1\":\"andersk84@gmail.com\",\"reason\":\"bio\",\"amount\":100,\"user2\":\"Petter\",\"misc\":{\"test\":\"val\"}}},{\"request_by\":\"andersk84@gmail.com\"}]"
-[
-    {
-        "debt": {
-            "user1": "Anders",
-            "uid1": "anders@gmail.com",
-            "reason": "bio",
-            "amount": 100,
-            "user2": "Petter",
-            "misc": {
-                "test": "val"
-            }
-        }
-    },
-    {
-        "request_by": "anders@gmail.com"
-    }
-]
-
-OPTIONALS:
-uid1, uid2, user1, user2, timestamp, misc
-
-returns:
-
-[
-    {
-        "debt": {
-            "uid1": "anders@gmail.com",
-            "user1": "Anders Karlsson",
-            "uid2": "ce9a6a0e-14de-4108-a6e7-5f966607758c",
-            "user2": "Petter",
-            "uuid": "4c81a051-d4c7-49b1-b09d-d580dd4b7dcf",
-            "reason": "bio",
-            "amount": 100,
-            "timestamp": 1368119368067262,
-            "status": "ok",
-            "misc": {
-                "test": "val"
-            }
-        }
-    }
-]
-
-GET
-
-curl http://localhost:8000/payapp/users
-[
-    {
-        "uid": "jenny@gmail.com",
-        "user": "Jenny Karlsson",
-        "usertype": "gmail"
-    },
-    {
-        "uid": "7e72bfc3-fb49-4380-8182-91662b19c22e",
-        "user": "Kalle",
-        "usertype": "local"
-    }
-]
-
-
-curl http://localhost:8000/payapp/user_transactions/anders@gmail.com
-[
-    {
-        "debt": {
-            "uuid": "cc0deda9-f9ba-4655-83af-d7501b20a247",
-            "uid1": "andersk84@gmail.com",
-            "uid2": "b783b74c-a231-48d5-a7b8-25d7f9af2e0f",
-            "timestamp": 1368123585174608,
-            "reason": "bio",
-            "amount": 100,
-            "misc": []
-        }
-    },
-    {
-        "debt": {
-            "uuid": "1725a382-9c6a-4b17-b27f-7ea9cd995994",
-            "uid1": "andersk84@gmail.com",
-            "uid2": "robert.f@gmail.com",
-            "timestamp": 1368123585231514,
-            "reason": "bio",
-            "amount": 100,
-            "misc": []
-        }
-    }
-]
-
-curl http://localhost:8000/payapp/user_debt/anders@gmail.com
-[
-    {
-        "debt": {
-            "uid1": "andersk84@gmail.com",
-            "uid2": "be526383-ba35-4110-a716-f6be520240e9",
-            "amount": -100
-        }
-    },
-    {
-        "debt": {
-            "uid1": "andersk84@gmail.com",
-            "uid2": "c7082a27-affb-4fb6-812a-104db3e319f6",
-            "amount": -100
-        }
-    }
-]
-
-
-================ Change notes ==================
------- V0.2g changes
-- fix transfer debts so that it does not add debts several times
-
------- V0.2f changes
-- fix transfer debts which was broken
-- Add possibility to change username in server
-
------- V0.2e changes
-- removed approve debts
-- add functionaliy to remove debts (same way as removing what previously was approval debts)
-
-
------- V0.2d changes
-
-
------- V0.2c changes
-
------------ api
-
-
-
+```
