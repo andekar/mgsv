@@ -28,12 +28,19 @@ Delete debt(s)
 **DATA:**
 ######
 ```json
-      [ {request_by : anders@gmail.com}
-      , {uuid       : 61c1e712-6f4c-4deb-8c9c-bb4276d65f07}
+      [ {"request_by" : "anders@gmail.com"}
+      , {"uuid"       : "61c1e712-6f4c-4deb-8c9c-bb4276d65f07"}
 	]
 ```
-**RETURN:** [{status : ok}] or [{error, request_failed}]
+**RETURN:**
 ######
+```json
+ [{status : ok}]
+```
+**or**
+```json
+ [{error, request_failed}]
+```
 **NOTE:** this can contain several uuid to different persons
 
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_debt -d "[{\"request_by\":\"jenny@gmail.com\"},{\"uuid\":\"61c1e712-6f4c-4deb-8c9c-bb4276d65f07\"}]"
@@ -53,12 +60,16 @@ Register user(s)
 ------
 **URL:**  register
 ######
-**DATA:** [ {request_by : anders@gmail.com}
+**DATA:**
+######
+```json
+      [ {request_by : anders@gmail.com}
       , {uid        : robert.f@gmail.com}
       , {name       : Robert}
       , {usertype   : gmail | local | facebook}
       , {currency   : SEK | NOK | ...}
       ]
+```
 **RETURN:** // TODO
 ######
 -- register user(s)
@@ -78,18 +89,27 @@ Lookup user(s)
 ######
 **DATA:**
 ######
-      [ {request_by : anders@gmail.com}
-      , {uid        : jenny@gmail.com}
+```json
+      [ {"request_by" : "anders@gmail.com"}
+      , {"uid"        : "jenny@gmail.com"}
       , ...
       ]
+```
 **RETURN:**
 ######
-	  [ { uid       : anders@gmail.com
-	  , user      : anders
-	  , user_type : gmail | local | facebook
-	  , currency  : SEK | NOK | ...}
+```json
+	  [ {"uid"       : "anders@gmail.com"}
+	  , {"user"      : "anders"}
+	  , {"user_type" : "gmail" | "local" | "facebook"}
+	  , {"currency"  : "SEK" | "NOK" | ...}
 	, ...
-	] or [{error, request_failed}]
+	] 
+```
+**or**
+```json
+ [{"error", "request_failed"}]
+```
+
 -- lookup user(s)
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/users -d "[{\"uid\":\"anders@gmail.com\"},{\"uid\":\"jenny_karlsson@live.com\"}]"
 [
@@ -121,13 +141,21 @@ Transfer debts
 ######
 **DATA:**
 ######
- [ {request_by : anders@gmail.com}
-      ,	{old_uid    : 01190f79-c0f2-45f9-a2bd-b37d19b85337}
-      , {new_uid    : jenny@gmail.com}
+```json
+      [ {"request_by" : "anders@gmail.com"}
+      ,	{"old_uid"    : "01190f79-c0f2-45f9-a2bd-b37d19b85337"}
+      , {"new_uid"    : "jenny@gmail.com"}
       ]
+```
 **RESPONSE:**
 ######
- [{status : ok}] or [{error, request_failed}]
+```json
+ [{"status" : "ok"}]
+```
+**or**
+```json
+[{"error", "request_failed"}]
+```
 **NOTE:** this transfers debts between request_by and old_uuid to request_by and new_uuid where new_uuid must already exist
 
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/transfer_debts -d "[{\"request_by\":\"anders@gmail.com\"},{\"old_uid\":\"01190f79-c0f2-45f9-a2bd-b37d19b85337\"},{\"new_uid\":\"jenny@gmail.com\"}]"
