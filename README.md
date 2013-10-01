@@ -75,8 +75,8 @@ Lookup user(s)
 **RETURN:**
 ######
 ```json
-[ {"uid"       : "anders@gmail.com"}
-, {"user"      : "anders"}
+[ {"uid"       : "jenny@gmail.com"}
+, {"user"      : "Jenny"}
 , {"user_type" : "gmail" | "local" | "facebook"}
 , {"currency"  : "SEK" | "NOK" | ...}
 , ...
@@ -185,7 +185,7 @@ users /** NOTE THIS WILL BE REMOVED SOON **/
 ```
 **or**
 ```json
- [{"error" : "request_failed"}]
+[{"error" : "request_failed"}]
 ```
 
 User transactions
@@ -235,10 +235,10 @@ User debt
 ######
 ```json
 [ { "debt" : { "uid1"     : "anders@gmail.com"
-     , "uid2"     : "petter@gmail.com"
-     , "amount"   : 127
-     , "currency" : "SEK" | "NOK" | ...
-     }
+             , "uid2"     : "petter@gmail.com"
+             , "amount"   : 127
+             , "currency" : "SEK" | "NOK" | ...
+             }
   , ...
   }
 ]
