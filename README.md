@@ -75,10 +75,11 @@ Lookup user(s)
 **RETURN:**
 ######
 ```json
-[ {"uid"       : "jenny@gmail.com"}
-, {"user"      : "Jenny"}
-, {"user_type" : "gmail" | "local" | "facebook"}
-, {"currency"  : "SEK" | "NOK" | ...}
+[ { "uid"       : "jenny@gmail.com"
+  , "user"      : "Jenny"
+  , "user_type" : "gmail" | "local" | "facebook"
+  , "currency"  : "SEK" | "NOK" | ...
+  }
 , ...
 ]
 ```
