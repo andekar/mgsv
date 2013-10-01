@@ -2,8 +2,11 @@ mgsv
 ====
 Delete user debts
 URL:  delete_user_debt
-DATA: [ {request_by : anders@gmail.com}
+DATA: 
+'''json
+      [ {request_by : anders@gmail.com}
       , {uid        : robert.f@gmail.com}]
+'''
 RETURN: [{status : ok}] or [{error, request_failed}]
 NOTE: this will remove the debt between the two given persons completely
 
