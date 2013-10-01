@@ -2,24 +2,24 @@ mgsv
 ====
 Delete user debts
 ------
-URL:  delete_user_debt
+**URL:**  delete_user_debt
 ######
-DATA: 
+**DATA:** 
 ######
 ```json
       [ {"request_by" : "anders@gmail.com"}
       , {"uid"        : "robert.f@gmail.com"}]
 ```
-RETURN:
+**RETURN:**
 ###### 
 ```json 
 	[{"status" : "ok"}] 
 ``` 
-or 
+**or**
 ```json
 	[{"error", "request_failed"}]
 ```
-NOTE: this will remove the debt between the two given persons completely
+**NOTE:** this will remove the debt between the two given persons completely
 ######
 
 curl -X PUT -H "Content-type: application/json" http://localhost:8000/payapp/delete_user_debt -d "[{\"request_by\":\"anders@gmail.com\"}, {\"uid\":\"robert.f@gmail.com\"}]"
