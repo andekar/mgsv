@@ -7,17 +7,17 @@ URL:  delete_user_debt
 DATA: 
 ######
 ```json
-      [ {request_by : anders@gmail.com}
-      , {uid        : robert.f@gmail.com}]
+      [ {"request_by" : "anders@gmail.com"}
+      , {"uid"        : "robert.f@gmail.com"}]
 ```
 RETURN:
 ###### 
 ```json 
-	[{status : ok}] 
+	[{"status" : "ok"}] 
 ``` 
 or 
 ```json
-	[{error, request_failed}]
+	[{"error", "request_failed"}]
 ```
 NOTE: this will remove the debt between the two given persons completely
 ######
