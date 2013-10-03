@@ -177,10 +177,11 @@ users /** NOTE THIS WILL BE REMOVED SOON **/
 **RESPONSE:**
 ######
 ```json
-[ {"uid"       : "anders@gmail.com"}
-, {"user"      : "anders"}
-, {"user_type" : "gmail" | "local" | "facebook"}
-, {"currency"  : "SEK" | "NOK" | ...}
+[ { "uid"       : "anders@gmail.com"
+  , "user"      : "anders"
+  , "user_type" : "gmail" | "local" | "facebook"
+  , "currency"  : "SEK" | "NOK" | ...
+  }
 , ...
 ]
 ```
