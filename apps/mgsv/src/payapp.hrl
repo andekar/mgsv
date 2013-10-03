@@ -10,6 +10,8 @@
 -define(REQUEST_BY, <<"request_by">>).
 -define(REQUEST_BY(By), {?REQUEST_BY, By}).
 
+-define(DEBUG_AS, <<"debug_as">>).
+-define(DEBUG_AS(As), {?DEBUG_AS, As}).
 %% ios token
 -define(IOS_TOKEN, <<"ios_token">>).
 -define(IOS_TOKEN(Token), {?IOS_TOKEN, Token}).
