@@ -1,7 +1,7 @@
 -module(distributor).
 
 -export([content_types_provided/2, content_types_accepted/2,
-         init/1, allowed_methods/2, from_json/2, to_html/2]).
+         init/1, allowed_methods/2, from_json/2, to_html/2, is_authorized/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 
@@ -26,18 +26,19 @@ from_json(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
 
-    Reply = case validate_replace_request_by(Decoded, Scheme) of
-                {ok, Props} -> error_logger:info_msg("PUT ~p ~p", [Url, Props]),
-                               try
-                                   {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
-                                   Result
-                               catch
-                                   _:Error ->
-                                       lager:alert("CRASH ~p", [Error]),
-                                       mochijson2:encode([[{error,request_failed}]])
-                               end;
-                    _ -> mochijson2:encode([[{error, user_not_authenticated}]])
-                end,
+    Reply =
+        case validate_replace_request_by(Decoded, Scheme) of
+            {ok, Props} -> error_logger:info_msg("PUT ~p ~p", [Url, Props]),
+                           try
+                               {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
+                               Result
+                           catch
+                               _:Error ->
+                                   lager:alert("CRASH ~p", [Error]),
+                                   mochijson2:encode([[{error,request_failed}]])
+                           end;
+            _ -> mochijson2:encode([[{error, user_not_authenticated}]])
+        end,
     error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
     {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}.
@@ -45,21 +46,57 @@ from_json(ReqData, Context) ->
 
 to_html(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
-    {Body, _RD, Ctx2} = case wrq:path_tokens(ReqData) of
-                            Any ->
-                                error_logger:info_msg("GET ~p",[Any]),
-                                {ok, Result} = try mgsv_server:send_message({Any, Scheme})
-                                               catch
-                                                   _:Err ->
-                                                       lager:alert("CRASH ~p", [Err]),
-                                                       mochijson2:encode([[{error,request_failed}]])
-                                               end,
-                                {Result, ReqData, Context}
-                        end,
+    {Body, _RD, Ctx2} =
+        case wrq:path_tokens(ReqData) of
+            Any ->
+                error_logger:info_msg("GET ~p",[Any]),
+                {ok, Result} = try mgsv_server:send_message({Any, Scheme})
+                               catch
+                                   _:Err ->
+                                       lager:alert("CRASH ~p", [Err]),
+                                       mochijson2:encode([[{error,request_failed}]])
+                               end,
+                {Result, ReqData, Context}
+        end,
     error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)]),
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
+
+is_authorized(ReqData, Context) ->
+    Scheme = ReqData#wm_reqdata.scheme,
+    case Scheme of
+        https ->
+            case wrq:get_req_header("authorization", ReqData) of
+                "Basic" ++ Base64 ->
+                    Str = base64:mime_decode_to_string(Base64),
+                    case string:tokens(Str, ":") of
+                        [UserId, Token] ->
+                            {true, ReqData, Context};
+                        _ ->
+                            {"Basic realm=webmachine", ReqData, Context}
+                    end;
+                _ ->
+                    lager:alert("Access denied due to no authorization string in header request"),
+                    {"Basic realm = ", ReqData, Context}
+            end;
+        _ -> {true, ReqData, Context}
+    end.
+
+%    Req = ?REQ(ReqProps),
+%    case Req:get_header_value("authorization") of
+%        "Basic "++Base64 ->
+%            Str = base64:mime_decode_to_string(Base64),
+%            case string:tokens(Str, ":") of
+%                ["authdemo", "demo1"] ->
+%                    {true, Context};
+%                _ ->
+%                    {"Basic realm=webmachine", Context}
+%            end;
+%        _ ->
+%            {"Basic realm=webmachine", Context}
+%    end;
+%    {true, Context}.
 
 destructify(List) when is_list(List)->
     lists:map(fun destructify/1, List);
