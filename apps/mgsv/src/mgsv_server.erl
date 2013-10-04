@@ -119,6 +119,25 @@ handle_call({["username"], Struct, https}, _From, State) ->
     pay_server:change_username(UserId, UserName),
     {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
+handle_call({["feedback"], Struct, _ANY}, _From, State) ->
+    [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
+    case  proplists:lookup_all(?FEEDBACK, Struct) of
+        [{_, Feedback}] ->
+            pay_server:add_feedback(ReqBy, Feedback),
+            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+        [] -> case proplists:lookup(?UUID, Struct) of
+                  [{_, Uuid}] -> pay_server:remove_feedback(Uuid),
+                                 {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+                  undefined ->
+                      Res = pay_server:get_feedback(), %% TODO maybe restrict to some users
+                      Return = lists:map( fun(List) ->
+                                                  ?JSONSTRUCT([{?FEEDBACK, List}]) end,
+                                          Res),
+                      Return2 = mochijson2:encode(Return),
+                      {reply, {ok, Return2}, State}
+              end
+    end;
+
 handle_call({["ios_token"], Struct, https}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Struct),

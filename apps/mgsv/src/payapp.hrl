@@ -12,6 +12,10 @@
 
 -define(DEBUG_AS, <<"debug_as">>).
 -define(DEBUG_AS(As), {?DEBUG_AS, As}).
+
+-define(FEEDBACK, <<"feedback">>).
+-define(FEEDBACK(F), proplists:get_value(?FEEDBACK, F)).
+
 %% ios token
 -define(IOS_TOKEN, <<"ios_token">>).
 -define(IOS_TOKEN(Token), {?IOS_TOKEN, Token}).

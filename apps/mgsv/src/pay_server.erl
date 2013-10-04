@@ -27,6 +27,9 @@
          , get_usernames/1
          , change_username/2
          , remove_user_debt/2
+         , add_feedback/2
+         , get_feedback/0
+         , remove_feedback/1
         ]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -39,11 +42,11 @@ init([]) ->
     {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
     {_,B} = db_w:open_file("../../users_0.3.2.dets",[{type, set}]),
     {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
-    {_,D} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
+    {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
     {ok, [ {?DEBTS,A}
          , {?USERS, B}
          , {?DEBT_TRANSACTIONS, C}
-         , {?DEBT_APPROVAL_TRANSACTIONS, D}]}.
+         , {?FEEDBACK, E}]}.
 
 call_pay(Message) ->
     gen_server:call(?MODULE, Message).
@@ -84,12 +87,27 @@ transfer_debts(OldUser, NewUser, ReqBy) ->
 remove_user_debt(Uuid, ReqBy) ->
     gen_server:cast(?MODULE,{remove_user_debt, Uuid, ReqBy}).
 
+add_feedback(ReqBy, Feedback) ->
+    gen_server:cast(?MODULE, {add_feedback, ReqBy, Feedback}).
+
+get_feedback() ->
+    gen_server:call(?MODULE, {get_feedback}).
+
+remove_feedback(Uuid) ->
+    gen_server:call({remove_feedback, Uuid}).
+
 %% callbacks
 handle_call(get_users, _From, State) ->
     Users = ?USERS(State),
     UserList = db_w:foldl(fun({_Uuid, PropList}, Acc) ->
                                   [PropList | Acc] end, [], Users),
     {reply, UserList, State};
+
+handle_call({get_feedback}, _From, State) ->
+    Feedback = ?FEEDBACK(State),
+    FeedbackList = db_w:foldl(fun(PropList, Acc) ->
+                                      [PropList | Acc] end, [], Feedback),
+    {reply, FeedbackList, State};
 
 handle_call({change_username, Uid, UserName}, _From, State) ->
     Users = ?USERS(State),
@@ -423,6 +441,20 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
+handle_cast({add_feedback, ReqBy, Feedback}, State) ->
+    FeedDB = ?FEEDBACK(State),
+    db_w:insert(FeedDB, { binary_uuid()
+                        , [ ?REQUEST_BY(ReqBy)
+                          , {?FEEDBACK, Feedback}
+                          , server_timestamp(get_timestamp())
+                          ]}),
+    {noreply, State};
+
+handle_cast({remove_feedback, Uuid}, State) ->
+    FeedDB = ?FEEDBACK(State),
+    db_w:delete(FeedDB, Uuid),
+    {noreply, State};
+
 handle_cast(Msg, State) ->
     lager:alert("Handle unknown cast ~p", [Msg]),
     {noreply, State}.
@@ -449,6 +481,7 @@ code_change(OldVsn, State, "0.3.2") ->
     {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
     {_,B} = db_w:open_file("../../users_0.3.2.dets",[{type, set}]),
     {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
+    {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
     db_w:traverse(Users,
                   fun({Uuid, Username}) ->
                       _R = case string:rstr(binary_to_list(Uuid), "@") of
@@ -496,7 +529,8 @@ code_change(OldVsn, State, "0.3.2") ->
     {ok, [ {?DEBTS,A}
          , {?USERS, B}
          , {?DEBT_TRANSACTIONS, C}
-         , {?DEBT_APPROVAL_TRANSACTIONS, ?DEBT_APPROVAL_TRANSACTIONS(State)}]};
+         , {?DEBT_APPROVAL_TRANSACTIONS, ?DEBT_APPROVAL_TRANSACTIONS(State)}
+         , {?FEEDBACK, E}]};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
