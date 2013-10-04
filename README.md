@@ -192,7 +192,7 @@ users /** NOTE THIS WILL BE REMOVED SOON **/
 
 User transactions
 ------
-**URL:** user_transactions/uuid  // This will later be changed to be a PUT operation
+**URL:** user_transactions/uuid
 ######
 **REQUEST_TYPE:** GET
 ######
@@ -229,7 +229,7 @@ User transactions
 
 User debt
 ------
-**URL:** user_debt/uuid  // This will later be changed to be a PUT operation
+**URL:** user_debt/uuid
 ######
 **REQUEST_TYPE:** GET
 ######
