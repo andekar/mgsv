@@ -2,12 +2,11 @@ mgsv
 ====
 
 # HTTPS
-------
 
 **NOTE** in the https request the Authorization field of the https header must contain {usertype}:{userid}:{usertoken} coded in Base64 as defined in the standard.
 
 **URL:**  debts/{id}
-#####
+##
 **METHOD** DELETE
 ######
 **DATA:** {id} user id of the other part
@@ -16,10 +15,11 @@ mgsv
 ######
 204 if successful
 500 if not
+
 **NOTE:** this will remove the debt between the two given persons completely
 
 **URL:**  debts
-#####
+##
 **METHOD** PUT
 ######
 **DATA:**
@@ -42,7 +42,7 @@ mgsv
 **NOTE:** this transfers debts between request_by and old_uuid to request_by and new_uuid where new_uuid must already exist
 
 **URL:**  debts
-#####
+##
 **METHOD** GET
 ######
 **RESPONSE:**
@@ -62,7 +62,7 @@ mgsv
 ```
 
 **URL:**  transactions/{id}
-#####
+##
 **METHOD** DELETE
 ######
 **DATA:** {id} id of the transaction
@@ -73,7 +73,7 @@ mgsv
 500 if not
 
 **URL:**  transactions
-#####
+##
 **METHOD** POST
 ######
 **DATA:**
@@ -128,7 +128,7 @@ mgsv
 ```
 
 **URL:**  transactions/[num] | [from]/[num]
-#####
+##
 **METHOD** GET
 ######
 **DATA:**
@@ -167,7 +167,7 @@ mgsv
 **NOTE** the list returned is sorted based on SERVER_TIMESTAMP
 
 **URL:**  users/{newusername}
-#####
+##
 **METHOD** PUT
 ######
 **DATA:** {newusername} - the new username
@@ -183,7 +183,7 @@ mgsv
 ```
 
 **URL:**  users
-#####
+##
 **METHOD** POST
 ######
 **DATA:**
@@ -215,7 +215,7 @@ mgsv
 ```
 
 **URL:**  users/{uid}/{uid}/...
-#####
+##
 **METHOD** GET
 ######
 **DATA:** {uid}/{uid}/... - user id:s of users to lookup
