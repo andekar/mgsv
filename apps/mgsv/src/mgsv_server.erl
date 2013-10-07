@@ -18,8 +18,116 @@ init([]) ->
 send_message(Message) ->
     gen_server:call(?MODULE, Message).
 
+%% delete requests
+handle_call({'DELETE', ReqBy, [Path, StrId], https}, _From, State) ->
+    Id = list_to_binary(StrId),
+    case Path of
+        "debts" ->
+            pay_server:remove_user_debt(Id,ReqBy),
+            {reply, ok, State};
+        "transactions" ->
+%            lager:info("delete transaction: ~p", [Id]),
+            pay_server:delete_debt({delete_debt, ReqBy, Id}),
+            {reply, ok, State};
+        "feedback" ->
+            pay_server:remove_feedback(Id),
+            {reply, ok, State};
+        _ -> lager:alert("Unknown path ~p", [Path]),
+             {reply, failed, State}
+    end;
+
+%%updates
+handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
+    case Path of
+        ["users", NewUsername] -> %% currently we only support change username
+            pay_server:change_username(ReqBy, NewUsername),
+            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+        ["debts"] -> %% transfer debts
+            [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Props),
+            [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Props),
+            lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
+            pay_server:transfer_debts(OldUid, NewUid, ReqBy),
+            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+        _ -> {reply, {ok, <<"ok">>}, State}
+    end;
+
+%%creations
+handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
+    case Path of
+        ["users"] -> %%Todo make sure ReqBy is the one being registered
+            pay_server:register_user(Props),
+            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+        ["transactions"] ->
+            Transactions = proplists:lookup_all(?TRANSACTION, Props),
+            Reply = lists:map(fun({?TRANSACTION, Vars}) ->
+                                      lager:debug("Add debt: ~p", [Vars]),
+                                      Tmp = pay_server:add_debt({add,ReqBy, Vars}),
+                                      ?JSONSTRUCT([{?TRANSACTION,Tmp}])
+                              end, Transactions),
+            {reply, {ok, mochijson2:encode(Reply)}, State};
+        ["feedback"] ->
+            pay_server:add_feedback(ReqBy, proplists:get_value(?FEEDBACK, Props)),
+            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}; %% TODO here we should return the feedback maybe?
+        _ -> {reply, {ok, <<"ok">>}, State}
+    end;
+
+%return res
+handle_call({'GET', ReqBy, Path, https}, _From, State) ->
+    case Path of
+        ["users"|Uids] ->
+            RealUids = lists:map(fun(Val) -> {?UID, list_to_binary(Val)} end, Uids),
+            Struct = pay_server:get_usernames(RealUids),
+            Ret = lists:map(fun(List) ->
+                                    case List of
+                                        [{error, E}] -> ?JSONSTRUCT([{error, E}]);
+                                        _ ->
+                                            ?JSONSTRUCT([?USER(List)])
+                                    end
+                            end,
+                            Struct),
+            {reply, {ok, mochijson2:encode(Ret)}, State};
+        ["transactions"|More] ->
+            Transactions = pay_server:get_user_transactions(ReqBy),
+            Sorted = lists:sort(fun(T1,T2) ->
+                                        DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
+                                        DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
+                                        DT1 >= DT2 end,
+                                Transactions),
+            {F, T} = case More of
+                         [To] ->
+                             {PNum,   []} = string:to_integer(To),
+                             {0, PNum};
+                         [From, To] ->
+                             {PFrom, []} = string:to_integer(From),
+                             {PNum,   []} = string:to_integer(To),
+                             {PFrom, PNum};
+                         _ -> {0, 999} %% max num seems almost to large...
+                     end,
+
+            Return = lists:map(fun(List) ->
+                                       ?JSONSTRUCT([?TRANSACTION(List)]) end,
+                               lists:sublist(lists:nthtail(F, Sorted), T)),
+            Return2 = mochijson2:encode(Return),
+            {reply, {ok, Return2}, State};
+        ["debts"] ->
+            Return = lists:map(fun({_Key,List}) ->
+                                       ?JSONSTRUCT([?DEBT(List)]) end,
+                               pay_server:get_user_debt(ReqBy)),
+            Return2 = mochijson2:encode(Return),
+            {reply, {ok, Return2}, State};
+        ["feedback"] ->
+            Res = pay_server:get_feedback(), %% TODO maybe restrict to some users
+            Return = lists:map( fun(List) ->
+                                        ?JSONSTRUCT([{?FEEDBACK, List}]) end,
+                                Res),
+            Return2 = mochijson2:encode(Return),
+            {reply, {ok, Return2}, State};
+        _ -> {reply, {ok, <<"ok">>}, State}
+    end;
+
+%%
 %Add debts
-handle_call({[], Struct, _Scheme}, _From, State) ->
+handle_call({[], Struct, http}, _From, State) ->
     [{_, ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     Debts = proplists:lookup_all(?DEBT, Struct),
     Reply = lists:map(fun({?DEBT, Vars}) ->
@@ -30,18 +138,18 @@ handle_call({[], Struct, _Scheme}, _From, State) ->
     {reply, {ok, mochijson2:encode(Reply)}, State};
 
 %get users
-handle_call({["users"], Uids, _Scheme}, _From, State) ->
+handle_call({["users"], Uids, http}, _From, State) ->
     RealUids = lists:map(fun(Val) -> Val end, Uids),
     Struct = pay_server:get_usernames(proplists:delete(?REQUEST_BY, RealUids)),
     {reply, {ok, mochijson2:encode(Struct)}, State};
 
 %register user
-handle_call({["register"], Struct, _Scheme}, _From, State) ->
+handle_call({["register"], Struct, http}, _From, State) ->
     pay_server:register_user(Struct),
     {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 %delete debt
-handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
+handle_call({["delete_debt"], Struct, http}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     Uuids = proplists:lookup_all(?UUID, Struct),
     _Reply = lists:map(fun({?UUID, Vars}) ->
@@ -50,7 +158,7 @@ handle_call({["delete_debt"], Struct, _Scheme}, _From, State) ->
                        end, Uuids),
     {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
-handle_call({["delete_user_debt"], Struct, _Scheme}, _From, State) ->
+handle_call({["delete_user_debt"], Struct, http}, _From, State) ->
     [{_,ReqBy}] = proplists:lookup_all(?REQUEST_BY, Struct),
     [{_,Uid}] = proplists:lookup_all(?UID, Struct),
     pay_server:remove_user_debt(Uid,ReqBy),
@@ -64,27 +172,27 @@ handle_call({["transfer_debts"], Struct, https}, _From, State) ->
     pay_server:transfer_debts(OldUid, NewUid, ReqBy),
     {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
-handle_call({["users"], _Scheme}, _From, State) ->
+handle_call({["users"], http}, _From, State) ->
     Return = lists:map(fun(PropList) ->
                        ?JSONSTRUCT(PropList) end,
                        pay_server:call_pay(get_users)),
     {reply, {ok, mochijson2:encode(Return)}, State};
 
-handle_call({["user_debt", User], _Scheme}, _From, State) ->
+handle_call({["user_debt", User], http}, _From, State) ->
     Return = lists:map(fun({_Key,List}) ->
                                ?JSONSTRUCT([?DEBT(List)]) end,
                        pay_server:get_user_debt(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call({["user_transactions", User], _Scheme}, _From, State) ->
+handle_call({["user_transactions", User], http}, _From, State) ->
     Return = lists:map(fun(List) ->
                                ?JSONSTRUCT([?DEBT(List)]) end,
                        pay_server:get_user_transactions(list_to_binary(User))),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call({["user_transactions", User, Num], _Scheme}, _From, State) ->
+handle_call({["user_transactions", User, Num], http}, _From, State) ->
     Transactions = pay_server:get_user_transactions(list_to_binary(User)),
     Sorted = lists:sort(fun(T1,T2) ->
                                 DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
@@ -98,7 +206,7 @@ handle_call({["user_transactions", User, Num], _Scheme}, _From, State) ->
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
 
-handle_call({["user_transactions", User, From, Num], _Scheme}, _From, State) ->
+handle_call({["user_transactions", User, From, Num], http}, _From, State) ->
     Transactions = pay_server:get_user_transactions(list_to_binary(User)),
     Sorted = lists:sort(fun(T1,T2) ->
                                 DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),

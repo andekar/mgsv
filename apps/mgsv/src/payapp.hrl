@@ -76,6 +76,10 @@
 -define(DEBT, <<"debt">>).
 -define(DEBT(Debt), {?DEBT, ?JSONSTRUCT(Debt)}).
 
+%% create a transaction struct
+-define(TRANSACTION, <<"transaction">>).
+-define(TRANSACTION(Trans), {?TRANSACTION, ?JSONSTRUCT(Trans)}).
+
 %% approved by user
 -define(ADDED_BY, <<"added_by">>).
 -define(ADDED_BY(Uid), {?ADDED_BY, Uid}).

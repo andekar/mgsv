@@ -42,10 +42,12 @@ init([]) ->
     {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
     {_,B} = db_w:open_file("../../users_0.3.2.dets",[{type, set}]),
     {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
+    {_,D} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
     {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
     {ok, [ {?DEBTS,A}
          , {?USERS, B}
          , {?DEBT_TRANSACTIONS, C}
+         , {?DEBT_APPROVAL_TRANSACTIONS, D}
          , {?FEEDBACK, E}]}.
 
 call_pay(Message) ->
@@ -621,7 +623,7 @@ remove_debt(Key, Name, Item) ->
     [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
     ok = db_w:delete(Name, Key),
     NewEntry = lists:delete(Item,?APPROVED_DEBTS(Props)),
-    lager:info("removing debts: ~p~n", [NewEntry]),
+%    lager:info("removing debts: ~p~n", [NewEntry]),
     ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
                                          NewEntry)}).
 
