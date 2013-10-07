@@ -57,7 +57,7 @@ cast_pay(Message) ->
     gen_server:cast(?MODULE, Message).
 
 register_user(UserInfo) ->
-    gen_server:cast(?MODULE, {register, UserInfo}).
+    gen_server:call(?MODULE, {register, UserInfo}).
 
 user_exist(Uid) ->
     gen_server:call(?MODULE, {user_exist, Uid}).
@@ -90,13 +90,13 @@ remove_user_debt(Uuid, ReqBy) ->
     gen_server:cast(?MODULE,{remove_user_debt, Uuid, ReqBy}).
 
 add_feedback(ReqBy, Feedback) ->
-    gen_server:cast(?MODULE, {add_feedback, ReqBy, Feedback}).
+    gen_server:call(?MODULE, {add_feedback, ReqBy, Feedback}).
 
 get_feedback() ->
     gen_server:call(?MODULE, {get_feedback}).
 
 remove_feedback(Uuid) ->
-    gen_server:call({remove_feedback, Uuid}).
+    gen_server:cast(?MODULE, {remove_feedback, Uuid}).
 
 %% callbacks
 handle_call(get_users, _From, State) ->
@@ -107,9 +107,21 @@ handle_call(get_users, _From, State) ->
 
 handle_call({get_feedback}, _From, State) ->
     Feedback = ?FEEDBACK(State),
-    FeedbackList = db_w:foldl(fun(PropList, Acc) ->
+    FeedbackList = db_w:foldl(fun({_Uuid, PropList}, Acc) ->
                                       [PropList | Acc] end, [], Feedback),
     {reply, FeedbackList, State};
+
+handle_call({add_feedback, ReqBy, Feedback}, _From, State) ->
+    FeedDB = ?FEEDBACK(State),
+    Uid = binary_uuid(),
+    FB = [ {?UID, Uid}
+         , ?REQUEST_BY(ReqBy)
+         , {?FEEDBACK, Feedback}
+         , server_timestamp(get_timestamp())
+         ],
+    db_w:insert(FeedDB, { Uid
+                        , FB}),
+    {reply, {ok, FB}, State};
 
 handle_call({change_username, Uid, UserName}, _From, State) ->
     Users = ?USERS(State),
@@ -265,11 +277,7 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
     {reply, ok, State};
 
-handle_call(Request, _From, State) ->
-    lager:alert("Handle unknown call ~p", [Request]),
-    {reply, ok, State}.
-
-handle_cast({register, UserInfo}, State) ->
+handle_call({register, UserInfo}, _From, State) ->
     Users = ?USERS(State),
     UidLower  = verify_uid(?UID_TO_LOWER(uid(UserInfo)), Users),
     RepUserType = case string:rstr(binary_to_list(UidLower), "@") of
@@ -278,17 +286,23 @@ handle_cast({register, UserInfo}, State) ->
                   end,
     UserType = proplists:get_value(?USER_TYPE, UserInfo, RepUserType), %%
     Currency = proplists:get_value(?CURRENCY, UserInfo, ?SWEDISH_CRONA),
+    ServerTimestamp = server_timestamp(get_timestamp()),
+    User = [ uid(UidLower)
+           , username(username(UserInfo))
+           , user_type(UserType)
+           , currency(Currency)
+           , ServerTimestamp],
     case db_w:lookup(Users, UidLower) of
         %% make sure that we never autogenerate username
-        [] -> db_w:insert(Users, {UidLower, [ uid(UidLower)
-                                            , username(username(UserInfo))
-                                            , user_type(UserType)
-                                            , currency(Currency)
-                                            , server_timestamp(get_timestamp())]}),
+        [] -> db_w:insert(Users, {UidLower, User}),
               lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, username(username(UserInfo)), UserType, Currency]);
         _  -> lager:info("User already exist")
     end,
-    {noreply, State};
+    {reply, User,  State};
+
+handle_call(Request, _From, State) ->
+    lager:alert("Handle unknown call ~p", [Request]),
+    {reply, ok, State}.
 
 %% notice how any one can change their username if we add this to calls
 handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
@@ -441,15 +455,6 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                end, DebtIds),
 
     lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
-    {noreply, State};
-
-handle_cast({add_feedback, ReqBy, Feedback}, State) ->
-    FeedDB = ?FEEDBACK(State),
-    db_w:insert(FeedDB, { binary_uuid()
-                        , [ ?REQUEST_BY(ReqBy)
-                          , {?FEEDBACK, Feedback}
-                          , server_timestamp(get_timestamp())
-                          ]}),
     {noreply, State};
 
 handle_cast({remove_feedback, Uuid}, State) ->

@@ -48,15 +48,15 @@ handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
             lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, ReqBy]),
             pay_server:transfer_debts(OldUid, NewUid, ReqBy),
             {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
-        _ -> {reply, {ok, <<"ok">>}, State}
+        _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
     end;
 
 %%creations
 handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
     case Path of
-        ["users"] -> %%Todo make sure ReqBy is the one being registered
-            pay_server:register_user(Props),
-            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+        ["users"] -> %%We should return the created user(s)
+            User = pay_server:register_user(proplists:get_value(?USER, Props)),
+            {reply, {ok, mochijson2:encode(?JSONSTRUCT([?USER, User]))}, State};
         ["transactions"] ->
             Transactions = proplists:lookup_all(?TRANSACTION, Props),
             Reply = lists:map(fun({?TRANSACTION, Vars}) ->
@@ -66,9 +66,10 @@ handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
                               end, Transactions),
             {reply, {ok, mochijson2:encode(Reply)}, State};
         ["feedback"] ->
-            pay_server:add_feedback(ReqBy, proplists:get_value(?FEEDBACK, Props)),
-            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}; %% TODO here we should return the feedback maybe?
-        _ -> {reply, {ok, <<"ok">>}, State}
+            [{?FEEDBACK, Feedback}] = proplists:lookup_all(?FEEDBACK, Props),
+            {ok, Result} = pay_server:add_feedback(ReqBy, Feedback),
+            {reply, {ok, mochijson2:encode([{?FEEDBACK, Result}])}, State};
+        _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
     end;
 
 %return res

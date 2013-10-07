@@ -10,7 +10,7 @@
 validate(Token, ?GMAIL_USER) ->
     validate_google(binary_to_list(Token));
 validate(_Token, _) ->
-    undefined.
+    {error, undefined_usertype}.
 
 validate_google(Token) ->
     Method = get,
@@ -22,3 +22,4 @@ validate_google(Token) ->
         = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
     {struct, List} = mochijson2:decode(Body),
     proplists:get_value(?EMAIL, List).
+

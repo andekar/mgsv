@@ -3,7 +3,7 @@
 -export([content_types_provided/2, content_types_accepted/2,
          init/1, allowed_methods/2, from_json/2, to_html/2,
          is_authorized/2, delete_resource/2, delete_completed/2,
-         process_post/2]).
+         process_post/2, resource_exists/2, malformed_request/2]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 
@@ -22,15 +22,76 @@ content_types_provided(ReqData, Context) ->
 content_types_accepted(RD, Ctx) ->
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
+resource_exists(ReqData, Context) ->
+    case { ReqData#wm_reqdata.method
+         , wrq:path_tokens(ReqData)
+         , ReqData#wm_reqdata.scheme} of
+        {'PUT', ["users", _UN], https} ->
+            {true, ReqData, Context};
+        {'GET', ["users"|_More], https} ->
+            {true, ReqData, Context};
+        {'POST', ["users"|_More], https} ->
+            {true, ReqData, Context};
+
+        {'DELETE', ["debts", _Id], https} ->
+            {true, ReqData, Context};
+        {'PUT', ["debts"], https} ->
+            {true, ReqData, Context};
+        {'GET', ["debts"], https} ->
+            {true, ReqData, Context};
+
+        {'DELETE', ["transactions", _Id], https} ->
+            {true, ReqData, Context};
+        {'POST', ["transactions"], https} ->
+            {true, ReqData, Context};
+        {'GET', ["transactions"|_ToFrom], https} ->
+            {true, ReqData, Context};
+
+        {'DELETE', ["feedback",_More], https} ->
+            {true, ReqData, Context};
+        {'POST', ["feedback"], https} ->
+            {true, ReqData, Context};
+        {'GET', ["feedback"], https} ->
+            {true, ReqData, Context};
+
+        {_, _, https} ->
+            {false, ReqData, Context};
+        _ -> {true, ReqData, Context} %% we do not want to change http version now
+    end.
+
+malformed_request(ReqData, Context) ->
+    case {ReqData#wm_reqdata.method, ReqData#wm_reqdata.scheme} of
+        {'POST', https} ->
+            case request_data(wrq:req_body(ReqData)) of
+                [] -> {true, ReqData, Context};
+                Json ->
+                    {false, ReqData, [{json, Json}| Context]}
+            end;
+        {'PUT', https} ->
+            case request_data(wrq:req_body(ReqData)) of
+                [] -> {true, ReqData, Context};
+                Json ->
+                    {false, ReqData, [{json, Json}| Context]}
+            end;
+        {'GET', https} ->
+            {false, ReqData, Context};
+        {'DELETE', https} ->
+            {false, ReqData, Context};
+        {_, http} ->
+            {false, ReqData, Context}
+    end.
+
+
 process_post(ReqData, Context) ->
-    lager:info("process_post"),
+    lager:info("process_post ~p", [Context]),
     Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
-    Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
+    [{json, Decoded}]  = proplists:lookup_all(json, Context),
+    [{userdata, Auth}] = proplists:lookup_all(userdata, Context),
     Reply =
-        case {validate_replace_request_by(Decoded, Scheme), Scheme} of
+        case {replace_request_by(Decoded, Auth, Scheme), Scheme} of
             {{ok, Props}, https} -> error_logger:info_msg("~p ~p ~p ~p ~p", [Method, Url, Any, Props, Scheme]),
                                     try
                                         {ok, Result} = mgsv_server:send_message({Method, proplists:get_value(?REQUEST_BY, Props),
@@ -43,8 +104,8 @@ process_post(ReqData, Context) ->
                                     end;
             _ -> mochijson2:encode([[{error, user_not_authenticated}]])
         end,
-    error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
+    error_logger:info_msg("REPLY ~s",[HBody]),
     {true, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(HBody, ReqData)), Context}.
 
 delete_resource(ReqData, Context) ->
@@ -53,9 +114,13 @@ delete_resource(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
 
     lager:info("~p ~p", [Method, Url]),
-    case mgsv_server:send_message({Method, <<"andersk84@gmail.com">>,
-                                   Url, Scheme}) of
+    {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
+    case catch mgsv_server:send_message({Method, list_to_binary(UserId),
+                                         Url, Scheme}) of
         ok -> {true, ReqData, Context};
+        {'EXIT', Error} ->
+            lager:alert("CRASH ~p", [Error]),
+            {false, ReqData, Context};
         _  -> {false, ReqData, Context}
     end.
 
@@ -66,12 +131,11 @@ delete_completed(ReqData, Context) ->
 from_json(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
-    Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
-    Decoded = lists:flatten(destructify(mochijson2:decode(Any))),
-
+    [{json, Decoded}] = proplists:lookup_all(json, Context),
+    [{userdata, Auth}]    = proplists:lookup_all(userdata, Context),
     Reply =
-        case {validate_replace_request_by(Decoded, Scheme), Scheme} of
+        case {replace_request_by(Decoded, Auth, Scheme), Scheme} of
             {{ok, Props}, http} -> error_logger:info_msg("~p ~p ~p", [Method, Url, Props]),
                                    try
                                        {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
@@ -114,7 +178,8 @@ to_html(ReqData, Context) ->
                 {Result, ReqData, Context};
             {Any, https} ->
                 error_logger:info_msg("~p ~p",[Method, Any]),
-                {ok, Result} = try mgsv_server:send_message({Method, <<"andersk84@gmail.com">>,
+                {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
+                {ok, Result} = try mgsv_server:send_message({Method, list_to_binary(UserId),
                                                              Any, Scheme})
                                catch
                                    _:Err ->
@@ -132,28 +197,23 @@ is_authorized(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
     case Scheme of
         https ->
-            case wrq:get_req_header("authorization", ReqData) of
-                "Basic" ++ Base64 ->
-                    Str = base64:mime_decode_to_string(Base64),
-                    case string:tokens(Str, ":") of
-                        [UserId, Token] ->
-                            lager:info("Request from ~p",[UserId]),
-                            case validate_user:validate(Token, ?GMAIL_USER) of
-                                "andersk84@gmail.com" -> 
-                                    {true, ReqData, Context};
-                                UserId ->
-                                    {true, ReqData, Context};
-                                _ ->
-                                    {false, ReqData, Context}
-                            end;
-
-                        Any ->
-                            lager:alert("Access denied authorization field: ~p", [Any]),
+            case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
+                {"debug", _UserId, _Token} = UserData ->
+                    {true, ReqData, [{userdata, UserData}|Context]};
+                {UserType, UserId, Token} = UserData ->
+                    lager:info("Request from ~p",[UserId]),
+                    case validate_user:validate(Token, UserType) of
+                        "andersk84@gmail.com" ->
+                            {true, ReqData, [{userdata, UserData}|Context]};
+                        UserId ->
+                            {true, ReqData, [{userdata, UserData}|Context]};
+                        _ ->
+                            lager:alert("Access denied authorization field, usertype ~p userid ~p from server ~p", [UserType, UserId, Token]),
                             {"Basic realm=webmachine", ReqData, Context}
                     end;
-                _ ->
-                    lager:alert("Access denied due to no authorization string in header request"),
-                    {"Basic realm = ", ReqData, Context}
+                Any ->
+                    lager:alert("Access denied authorization field: ~p", [Any]),
+                    {"Basic realm=webmachine", ReqData, Context}
             end;
         _ -> {true, ReqData, Context}
     end.
@@ -167,24 +227,34 @@ destructify({Key, PossibleList}) ->
 destructify(Other) ->
     Other.
 
-validate_replace_request_by(Props, http) ->
+replace_request_by(Props, _Any, http) ->
     {ok, Props};
+replace_request_by(Props, {_UserType, UserId, _Token}, https) ->
+    {ok, replace_prop(?REQUEST_BY, Props, list_to_binary(UserId))};
+replace_request_by(_,_,_) ->
+    {error,failed}.
 
-validate_replace_request_by(Props, https) ->
-    case proplists:get_value(?REQUEST_BY, Props) of
-        undefined -> [{error, missing_request_by}];
-        Val -> case validate_user:validate(Val, ?GMAIL_USER) of
-                   undefined ->
-                       [{error, invalid_user}];
-                   "andersk84@gmail.com" ->
-                       case proplists:get_value(?DEBUG_AS, Props) of
-                           undefined ->{ok, replace_prop(?REQUEST_BY, Props, "andersk84@gmail.com")};
-                           DebugUser -> {ok, replace_prop(?REQUEST_BY, Props, DebugUser)}
-                       end;
-                   User -> {ok, replace_prop(?REQUEST_BY, Props, User)}
-               end
-    end.
 
+user_from_auth("Basic" ++ Base64) ->
+    Str = base64:mime_decode_to_string(Base64),
+    case string:tokens(Str, ":") of
+        [UserType, UserId, Token] ->
+            {UserType, UserId, Token};
+        Any ->
+            lager:error("trying to decode authorization field, got ~p", [Any]),
+            {error, wrong_format}
+    end;
+user_from_auth(_) ->
+    {error, wrong_format}.
 
 replace_prop(Key, List, Value) ->
     [{Key, Value} | proplists:delete(Key, List)].
+
+
+request_data(Data) ->
+    try lists:flatten(destructify(mochijson2:decode(Data)))
+    catch
+        _:Errors ->
+            lager:alert("CRASH when decoding json ~p", [Errors]),
+            []
+    end.
