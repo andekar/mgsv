@@ -201,14 +201,15 @@ is_authorized(ReqData, Context) ->
                 {"debug", _UserId, _Token} = UserData ->
                     {true, ReqData, [{userdata, UserData}|Context]};
                 {UserType, UserId, Token} = UserData ->
+                    BinUserId = list_to_binary(UserId),
                     lager:info("Request from ~p",[UserId]),
-                    case validate_user:validate(Token, UserType) of
-                        "andersk84@gmail.com" ->
+                    case validate_user:validate(list_to_binary(Token), list_to_binary(UserType)) of
+                        <<"andersk84@gmail.com">> ->
                             {true, ReqData, [{userdata, UserData}|Context]};
-                        UserId ->
+                        BinUserId ->
                             {true, ReqData, [{userdata, UserData}|Context]};
-                        _ ->
-                            lager:alert("Access denied authorization field, usertype ~p userid ~p from server ~p", [UserType, UserId, Token]),
+                        Res ->
+                            lager:alert("Access denied authorization field, usertype ~p userid ~p  res ~p", [UserType, UserId, Res]),
                             {"Basic realm=webmachine", ReqData, Context}
                     end;
                 Any ->
