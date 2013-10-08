@@ -268,6 +268,12 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     % crash if there is no such debt
     [{Uuid, Items}] = db_w:lookup(DebtTransactions, Uuid),
 
+    %crash if reqby is not one of the uids in the debt
+    ok = case {uid1(Items), uid2(Items)} of
+             {ReqBy, _} -> ok;
+             {_ , ReqBy} -> ok;
+             _ -> {error, requestby_not_part_of_transaction}
+         end,
     db_w:delete(DebtTransactions, Uuid),
     Uid1 = proplists:get_value(?UID1, Items),
     Uid2 = proplists:get_value(?UID2, Items),
