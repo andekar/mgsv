@@ -54,6 +54,9 @@ resource_exists(ReqData, Context) ->
         {'GET', ["feedback"], https} ->
             {true, ReqData, Context};
 
+        {'POST', ["ios_token"], https} ->
+            {true, ReqData, Context};
+
         {_, _, https} ->
             {false, ReqData, Context};
         _ -> {true, ReqData, Context} %% we do not want to change http version now

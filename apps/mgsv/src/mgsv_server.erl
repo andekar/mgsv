@@ -69,6 +69,10 @@ handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
             [{?FEEDBACK, Feedback}] = proplists:lookup_all(?FEEDBACK, Props),
             {ok, Result} = pay_server:add_feedback(ReqBy, Feedback),
             {reply, {ok, mochijson2:encode([{?FEEDBACK, Result}])}, State};
+        ["ios_token"] ->
+            [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Props),
+            pay_push_notification:add_user_ios(ReqBy, IosToken),
+            {reply, {ok, mochijson2:encode([{?IOS_TOKEN, IosToken}])}, State};
         _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
     end;
 
