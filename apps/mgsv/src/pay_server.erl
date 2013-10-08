@@ -209,6 +209,12 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
              Uid2 -> can_not_add_debt_to_self;
              _ -> ok
          end,
+    % check same currency
+    Currency1 = currency(PropList1),
+    ok = case currency(PropList2) of
+             Currency1 -> ok;
+             _ -> {error, wrong_currency}
+         end,
     SortedDebt = sort_user_debt(Uid1, Uid2, Amount)
                  ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
                                                     , {?CURRENCY, Currency}
@@ -423,7 +429,15 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                                             end end, ResDebts),
 
     %the user must exist already
-    [{TNewUser, _PropList}] = db_w:lookup(Users, TNewUser),
+    [{TNewUser, NPropList}] = db_w:lookup(Users, TNewUser),
+    [{TOldUser, OPropList}] = db_w:lookup(Users, TOldUser),
+
+    %% currency must be same
+    OldCurr = currency(OPropList),
+    ok = case currency(NPropList) of
+             OldCurr -> ok;
+             _ -> {error, currency_must_be_same}
+         end,
 
     % delete the debt
     db_w:delete(Debts, {P1, P2}),
