@@ -26,7 +26,7 @@ resource_exists(ReqData, Context) ->
     case { ReqData#wm_reqdata.method
          , wrq:path_tokens(ReqData)
          , ReqData#wm_reqdata.scheme} of
-        {'PUT', ["users", _UN], https} ->
+        {'PUT', ["users"], https} ->
             {true, ReqData, Context};
         {'GET', ["users"|_More], https} ->
             {true, ReqData, Context};
@@ -56,8 +56,11 @@ resource_exists(ReqData, Context) ->
 
         {'POST', ["ios_token"], https} ->
             {true, ReqData, Context};
+        {'DELETE', ["ios_token", _Badge], https} ->
+            {true, ReqData, Context};
 
-        {_, _, https} ->
+        {Method, Path, https} ->
+            lager:alert("request denied method ~p path ~p", [Method, Path]),
             {false, ReqData, Context};
         _ -> {true, ReqData, Context} %% we do not want to change http version now
     end.
@@ -86,7 +89,6 @@ malformed_request(ReqData, Context) ->
 
 
 process_post(ReqData, Context) ->
-    lager:info("process_post ~p", [Context]),
     Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
     Any = wrq:req_body(ReqData),

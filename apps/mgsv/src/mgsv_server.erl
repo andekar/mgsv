@@ -32,6 +32,9 @@ handle_call({'DELETE', ReqBy, [Path, StrId], https}, _From, State) ->
         "feedback" ->
             pay_server:remove_feedback(Id),
             {reply, ok, State};
+        "ios_token" ->
+            pay_push_notification:clear_counter(ReqBy),
+            {reply, ok, State};
         _ -> lager:alert("Unknown path ~p", [Path]),
              {reply, failed, State}
     end;
@@ -39,8 +42,9 @@ handle_call({'DELETE', ReqBy, [Path, StrId], https}, _From, State) ->
 %%updates
 handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
     case Path of
-        ["users", NewUsername] -> %% currently we only support change username
-            pay_server:change_username(ReqBy, NewUsername),
+        ["users"] -> %% currently we only support change username
+            [{_, User}] = proplists:lookup_all(?USER, Props),
+            pay_server:change_username(ReqBy, User),
             {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
         ["debts"] -> %% transfer debts
             [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Props),
@@ -55,8 +59,8 @@ handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
 handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
     case Path of
         ["users"] -> %%We should return the created user(s)
-            User = pay_server:register_user(proplists:get_value(?USER, Props)),
-            {reply, {ok, mochijson2:encode(?JSONSTRUCT([?USER, User]))}, State};
+            User = pay_server:register_user(Props),
+            {reply, {ok, mochijson2:encode([?JSONSTRUCT([{?USER, User}])])}, State};
         ["transactions"] ->
             Transactions = proplists:lookup_all(?TRANSACTION, Props),
             Reply = lists:map(fun({?TRANSACTION, Vars}) ->
