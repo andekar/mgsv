@@ -97,22 +97,40 @@ handle_call({'GET', ReqBy, Path, https}, _From, State) ->
             {reply, {ok, mochijson2:encode(Ret)}, State};
         ["transactions"|More] ->
             Transactions = pay_server:get_user_transactions(ReqBy),
+            {OtherUid, F, T} = case More of
+                         [To] ->
+                             {PNum,   []} = string:to_integer(To),
+                             {undefined, 0, PNum};
+                         [From, To] ->
+                             {PFrom, []} = string:to_integer(From),
+                             {PNum,   []} = string:to_integer(To),
+                             {undefined, PFrom, PNum};
+                         [OtherU, From, To] ->
+                             {PFrom, []} = string:to_integer(From),
+                             {PNum,   []} = string:to_integer(To),
+                             {OtherU, PFrom, PNum};
+                         _ -> {undefined, 0, 999} %% max num seems almost to large...
+                     end,
+
+            Filtered = case OtherUid of
+                           undefined -> Transactions;
+                           _ ->
+                               BinUid = list_to_binary(OtherUid),
+                               lists:filter(fun(Props) ->
+                                                    lists:any(fun({?UID1, TBinUid}) -> TBinUid =:= BinUid;
+                                                                 ({?UID2, TBinUid}) -> TBinUid =:= BinUid;
+                                                                 (_) -> false
+                                                              end, Props)
+                                            end,
+                                            Transactions)
+
+                       end,
+
             Sorted = lists:sort(fun(T1,T2) ->
                                         DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
                                         DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
                                         DT1 >= DT2 end,
-                                Transactions),
-            {F, T} = case More of
-                         [To] ->
-                             {PNum,   []} = string:to_integer(To),
-                             {0, PNum};
-                         [From, To] ->
-                             {PFrom, []} = string:to_integer(From),
-                             {PNum,   []} = string:to_integer(To),
-                             {PFrom, PNum};
-                         _ -> {0, 999} %% max num seems almost to large...
-                     end,
-
+                                Filtered),
             Return = lists:map(fun(List) ->
                                        ?JSONSTRUCT([?TRANSACTION(List)]) end,
                                lists:sublist(lists:nthtail(F, Sorted), T)),

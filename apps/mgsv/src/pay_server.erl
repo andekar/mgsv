@@ -197,7 +197,6 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                               , user_type(UserType)
                                               , currency(Currency)
                                               , ServerTimeStamp],
-%                                       lager:info("ADD user ~p", [username(User)]),
                                        db_w:insert(Users, {Uid, List}),
                                        {Uid, List};
                                  [Val]  -> Val
@@ -209,25 +208,31 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
              Uid2 -> can_not_add_debt_to_self;
              _ -> ok
          end,
-    % check same currency
-    Currency1 = currency(PropList1),
-    ok = case currency(PropList2) of
-             Currency1 -> ok;
-             _ -> {error, wrong_currency}
-         end,
-    SortedDebt = sort_user_debt(Uid1, Uid2, Amount)
-                 ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
-                                                    , {?CURRENCY, Currency}
+    SortedUDebt = sort_user_debt(Uid1, Uid2, Amount),
+    SortMult = Amount/amount(SortedUDebt),
+    OrgDebt = case {amount(SortedUDebt) == Amount, proplists:lookup_all(?ORG_DEBT, Struct)} of
+                  {_, []} -> [{?ORG_DEBT, [{?AMOUNT, amount(SortedUDebt)}, {?CURRENCY, Currency}]}];
+                  {false, [{?ORG_DEBT, OrgD}]} -> [{?ORG_DEBT,  replace_prop(?AMOUNT, OrgD, -1* amount(OrgD))}];
+                  {true, ODs} -> ODs
+              end,
+    {Curr, Am} = currency_and_amount({uid1(SortedUDebt), uid2(SortedUDebt)}
+                                     , SortedUDebt ++ [ {?CURRENCY, Currency}]
+                                     ++ OrgDebt, Debts),
+    lager:info("got curr ~p Am ~p", [Curr, Am]),
+    SortedDebt =
+        sort_user_debt(uid1(SortedUDebt), uid2(SortedUDebt), Am)
+        ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
+                                                    , {?CURRENCY, Curr}
                                                     , {?UUID, Uuid}
                                                     , ServerTimeStamp]
-                                      ++ proplists:lookup_all(?ORG_DEBT, Struct),
+                                      ++ OrgDebt,
     ok = case { proplists:lookup(?USER_TYPE, PropList1)
               , proplists:lookup(?USER_TYPE, PropList2)} of
              %don't add debts between two localusers
              {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
              _       ->
                  add_transaction(SortedDebt, ApprovalDebt, Debts)
-        end,
+         end,
 
     lager:info("Inserting Debt: ~p", [SortedDebt]),
     db_w:insert(DebtTransactions, {Uuid, SortedDebt}),
@@ -237,6 +242,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             _ -> pay_push_notification:notify_user(Uid1, Reason),
                  pay_push_notification:notify_user(Uid2, Reason)
         end,
+    OD = proplists:get_value(?ORG_DEBT, OrgDebt),
     %% this should be changed to [{paid_by:[{user}]}, {paid_for:[user,user]}]
     {reply, [ % first user stuff
               ?UID1(Uid1)
@@ -251,13 +257,14 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             %% DEBT stuff
             , ?UUID(Uuid)
             , ?REASON(Reason)
-            , ?AMOUNT(Amount)     %% saved for backwardscompability
+            , ?AMOUNT(SortMult * amount(SortedDebt))     %% saved for backwardscompability
             , ?CURRENCY(Currency) %% saved for backwardscompability
             , timestamp(TimeStamp)
             , ServerTimeStamp
             , ?STATUS(<<"ok">>)
             ] ++ EchoUuid
-                    ++ proplists:lookup_all(?ORG_DEBT, Struct)
+              ++ [{?ORG_DEBT,
+                   replace_prop(?AMOUNT, OD, amount(OD) * SortMult)}]
        , State};
 
 %% should we send a notification to the other part?
@@ -609,7 +616,31 @@ add_to_earlier_debt(Amount, Key = {Uid1, Uid2}, Currency, Debts) ->
         _ -> error
     end.
 
-
+currency_and_amount(Key, Props, DebtDb) ->
+    case db_w:lookup(DebtDb, Key) of
+        [] ->
+%            lager:alert("nothing found in DB"),
+            {currency(Props), amount(Props)};
+        [{_,List}] ->
+            Currency = currency(List),
+%            lager:alert("looking at currency ~p", [Currency]),
+            case {currency(Props), proplists:lookup_all(?ORG_DEBT, Props)} of
+                {Currency, _} ->
+%                    lager:alert("same currency"),
+                    {currency(Props), amount(Props)};
+                {Other, []} ->
+%                    lager:alert("First Other looking up rate"),
+                    {Currency, exchange_rate:rate(Other, Currency) * amount(Props)};
+                {_Other, [{?ORG_DEBT, OrgD}]} -> case currency(OrgD) of
+                                                     Currency ->
+%                                                         lager:alert("second Other using orgdebt"),
+                                                         {Currency, amount(OrgD)};
+                                                     OrgCurr ->
+%                                                         lager:alert("third Other looking up rate"),
+                                                         {Currency, exchange_rate:rate(OrgCurr, Currency) * amount(OrgD)}
+                                                 end
+            end
+    end.
 
 uuid_to_binary(Uuid) ->
      list_to_binary(uuid:to_string(Uuid)).
