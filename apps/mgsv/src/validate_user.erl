@@ -24,7 +24,7 @@ start_link() ->
 
 init([]) ->
     ets:new(?VALIDATE_USR_TBL, [set, named_table]),
-    erlang:send_after(?INTERVAL, self(), trigger),
+    timer:send_interval(?INTERVAL, self(), trigger),
     {ok, [?VALIDATE_USR_TBL]}.
 
 handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
