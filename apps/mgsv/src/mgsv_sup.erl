@@ -29,5 +29,6 @@ init([]) ->
     WebMachine = ?CHILD(machine_sup, supervisor),
     PayServer = ?CHILD(pay_server, worker),
     PayPushNotification = ?CHILD(pay_push_notification, worker),
-    Processes = [WebMachine, MgsvServer, PayServer, PayPushNotification],
+    ValidateUsers = ?CHILD(validate_user, worker),
+    Processes = [WebMachine, MgsvServer, PayServer, PayPushNotification, ValidateUsers],
     {ok, { {one_for_one, 6000, 1}, Processes} }.
