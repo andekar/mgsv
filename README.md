@@ -89,7 +89,7 @@ mgsv
             , "currency"  : "SEK" | "NOK" | ...
             , "timestamp" : 12346567            // seconds since 1970
             , "echo_uuid" : "324237483"         // any client created guid
-            , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+            , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                             , "currency" : "SEK" | "NOK" | ...
                             }
             }
@@ -114,7 +114,7 @@ mgsv
            , "server_timestamp" : 12346567     // seconds since 1970
            , "echo_uuid"  : "324237483"         // any client created guid
            , "status"     : "ok"
-           , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+           , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
            }
@@ -127,12 +127,13 @@ mgsv
 [{"error" : "request_failed"}]
 ```
 
-**URL:**  transactions/[num] | [from]/[num]
+**URL:**  transactions/[num] | [from]/[num] | [userid]/[from]/[num]
 ##
 **METHOD** GET
 ######
 **DATA:**
 ######
+[userid] - id of other party to find transactions between
 [num]  - number of transactions to return
 [from] - begin at another location in the sorted list of transactions
 **RESPONSE:**
@@ -152,7 +153,7 @@ mgsv
            , "server_timestamp" : 12346567     // seconds since 1970
            , "echo_uuid"  : "324237483"         // any client created guid
            , "status"     : "ok"
-           , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+           , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
            }
@@ -166,12 +167,15 @@ mgsv
 ```
 **NOTE** the list returned is sorted based on SERVER_TIMESTAMP
 
-**URL:**  users/{newusername}
+**URL:**  users
 ##
 **METHOD** PUT
 ######
-**DATA:** {newusername} - the new username
+**DATA:**
 ######
+```json
+[ {"user" : "anders"}
+]
 **RETURN:**
 ######
 ```json
@@ -419,7 +423,7 @@ Add debts
             , "currency"  : "SEK" | "NOK" | ...
             , "timestamp" : 12346567            // seconds since 1970
             , "echo_uuid" : "324237483"         // any client created guid
-            , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+            , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                             , "currency" : "SEK" | "NOK" | ...
                             }
             }
@@ -445,7 +449,7 @@ Add debts
            , "server_timestamp" : 12346567     // seconds since 1970
            , "echo_uuid"  : "324237483"         // any client created guid
            , "status"     : "ok"
-           , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+           , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
            }
@@ -504,7 +508,7 @@ User transactions
            , "server_timestamp" : 12346567     // seconds since 1970
            , "echo_uuid"  : "324237483"         // any client created guid
            , "status"     : "ok"
-           , "org_debt"  : { "amount"   : 127  // this is in case there is a second currency involved
+           , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
            }
