@@ -208,7 +208,7 @@ is_authorized(ReqData, Context) ->
                 {UserType, UserId, Token} = UserData ->
                     BinUserId = list_to_binary(UserId),
                     lager:info("Request from ~p",[UserId]),
-                    case validate_user:validate(list_to_binary(Token), list_to_binary(UserType)) of
+                    case validate_user:validate(list_to_binary(Token), BinUserId, list_to_binary(UserType)) of
                         <<"andersk84@gmail.com">> ->
                             {true, ReqData, [{userdata, UserData}|Context]};
                         BinUserId ->
