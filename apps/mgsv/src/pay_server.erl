@@ -511,64 +511,9 @@ terminate(Reason, State) ->
     db_w:close(DebtTransactions),
     ok.
 
-code_change(OldVsn, State, "0.3.2") ->
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.2"]),
-    Users = ?USERS(State),
-    DebtRecord = ?DEBT_RECORD(State),
-    Debts = ?DEBTS(State),
-    {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
-    {_,B} = db_w:open_file("../../users_0.3.2.dets",[{type, set}]),
-    {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
-    {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
-    db_w:traverse(Users,
-                  fun({Uuid, Username}) ->
-                      _R = case string:rstr(binary_to_list(Uuid), "@") of
-                          0 -> db_w:insert(B, {Uuid, [ uid(Uuid)
-                                                     , username(Username)
-                                                     , user_type(?LOCAL_USER)
-                                                     , currency(?SWEDISH_CRONA)
-                                                     , server_timestamp(get_timestamp())]});
-                          _ -> db_w:insert(B, {Uuid, [ uid(Uuid)
-                                                     , username(Username)
-                                                     , user_type(?GMAIL_USER)
-                                                     , currency(?SWEDISH_CRONA)
-                                                     , server_timestamp(get_timestamp())]})
-                      end,
-                  continue
-                  end),
-    db_w:traverse(DebtRecord,
-                  fun({Uuid, {Uid1, Uid2}, Time, Reason, Amount}) ->
-                          ServerTimeStampStr = inttostring(Time),
-                          Fill = 16 - length(ServerTimeStampStr),
-                          ServerTimeStamp = list_to_integer(ServerTimeStampStr ++ repeat(max(0,Fill), "0", "")),
-                          db_w:insert(C, { Uuid
-                                         , [ {?UUID, Uuid}
-                                         , {?UID1, Uid1}
-                                         , {?UID2, Uid2}
-                                         , timestamp(Time)
-                                         , {?SERVER_TIMESTAMP, ServerTimeStamp}
-                                         , {?REASON, Reason}
-                                         , {?AMOUNT, Amount}
-                                         , {?CURRENCY, ?SWEDISH_CRONA}
-                                           ]}),
-                  continue
-                  end),
-    db_w:traverse(Debts,
-                  fun({{P1, P2}, Amount}) ->
-                          db_w:insert(A, {{P1, P2}, [ {?AMOUNT, Amount}
-                                                    , {?CURRENCY, ?SWEDISH_CRONA}
-                                                    , {?UID1, P1}
-                                                    , {?UID2, P2}]}), %%DEFAULT to SEK
-                  continue
-                  end),
-    db_w:close(Users),
-    db_w:close(DebtRecord),
-    db_w:close(Debts),
-    {ok, [ {?DEBTS,A}
-         , {?USERS, B}
-         , {?DEBT_TRANSACTIONS, C}
-         , {?DEBT_APPROVAL_TRANSACTIONS, ?DEBT_APPROVAL_TRANSACTIONS(State)}
-         , {?FEEDBACK, E}]};
+code_change(OldVsn, State, "0.3.3") ->
+    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.3"]),
+    {ok, State};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
