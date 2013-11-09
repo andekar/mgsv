@@ -25,7 +25,7 @@
          , user_exist/1
          , user_exist/2
          , get_usernames/1
-         , change_username/2
+         , change_userinfo/2
          , remove_user_debt/2
          , add_feedback/2
          , get_feedback/0
@@ -71,8 +71,8 @@ delete_debt(Message) ->
 get_user_debt(User) ->
     gen_server:call(?MODULE, {get_user_debt, User}).
 
-change_username(Uid, UserName) ->
-    gen_server:call(?MODULE, {change_username, Uid, UserName}).
+change_userinfo(Uid, UserInfo) ->
+    gen_server:call(?MODULE, {change_userinfo, Uid, UserInfo}).
 
 get_user_transactions(User) ->
     gen_server:call(?MODULE, {get_user_transactions, User}).
@@ -123,18 +123,26 @@ handle_call({add_feedback, ReqBy, Feedback}, _From, State) ->
                         , FB}),
     {reply, {ok, FB}, State};
 
-handle_call({change_username, Uid, UserName}, _From, State) ->
+handle_call({change_userinfo, Uid, UserInfo}, _From, State) ->
     Users = ?USERS(State),
     Res = case db_w:lookup(Users, Uid) of
-            [{Uid, PropList}] ->
-                db_w:delete(Users, Uid),
-                db_w:insert(Users, {Uid, replace_prop(?USER, PropList, UserName)}),
-                ok;
-            Other ->
-                lager:error("Tried changing username got ~p from db Uid ~p Un ~p"
-                            , [Other, Uid, UserName]),
-                error
-        end,
+              [{Uid, PropList}] ->
+                  ToChange = [?USER, ?CURRENCY],
+                  db_w:delete(Users, Uid),
+                  NewProplist =
+                      lists:foldl(fun(Change, Props) ->
+                                          case proplists:get_value(Change, UserInfo) of
+                                              undefined -> Props;
+                                              Val -> replace_prop(Change, Props, Val)
+                                          end
+                                  end, PropList, ToChange),
+                  db_w:insert(Users, {Uid, NewProplist}),
+                  ok;
+              Other ->
+                  lager:error("Tried changing username got ~p from db Uid ~p Un ~p"
+                              , [Other, Uid, UserInfo]),
+                  error
+          end,
     {reply, [Res], State};
 
 handle_call({get_user_debt, User},  _From, State) ->
@@ -637,21 +645,8 @@ remove_debt(Key, Name, Item) ->
 % or if the uid contains @
 verify_uid(undefined, _Db) ->
     binary_uuid();
-verify_uid(User, Db) ->
-    case contains_at(User) of
-        invalid -> case db_w:lookup(Db, User) of
-                 [] -> invalid;
-                 _ -> User
-             end;
-        _ -> User
-    end.
-
-contains_at(User) ->
-    ListUser = binary_to_list(User),
-    case string:rstr(ListUser, "@") of
-        0 -> invalid;
-        _ -> User
-    end.
+verify_uid(User, _Db) ->
+    User.
 
 get_tot_debts(Debts, User) ->
     DebtsList  = db_w:match(Debts, {{User, '$1'}, '$2'}),
@@ -751,13 +746,3 @@ props(Name, {Name, Val}) ->
     Val;
 props(Name, Arg) ->
     {Name, Arg}.
-
-repeat(Num, _Rep, Acc) when Num == 0 ->
-    Acc;
-repeat(Num, Rep, Acc) ->
-    repeat(Num - 1, Rep, Rep ++ Acc).
-
-inttostring(Time) when is_binary(Time)->
-    binary_to_list(Time);
-inttostring(Time) ->
-    lists:flatten(io_lib:format("~p",[Time])).

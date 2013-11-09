@@ -43,8 +43,7 @@ handle_call({'DELETE', ReqBy, [Path, StrId], https}, _From, State) ->
 handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
     case Path of
         ["users"] -> %% currently we only support change username
-            [{_, User}] = proplists:lookup_all(?USER, Props),
-            pay_server:change_username(ReqBy, User),
+            pay_server:change_userinfo(ReqBy, Props),
             {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
         ["debts"] -> %% transfer debts
             [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Props),
@@ -247,12 +246,6 @@ handle_call({["user_transactions", User, From, Num], http}, _From, State) ->
                        lists:sublist(lists:nthtail(PFrom, Sorted), PNum)),
     Return2 = mochijson2:encode(Return),
     {reply, {ok, Return2}, State};
-
-handle_call({["username"], Struct, https}, _From, State) ->
-    [{_, UserId}] = proplists:lookup_all(?UID, Struct),
-    [{_, UserName}] = proplists:lookup_all(?USER, Struct),
-    pay_server:change_username(UserId, UserName),
-    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
 
 handle_call({["feedback"], Struct, _ANY}, _From, State) ->
     [{_,ReqBy}]  = proplists:lookup_all(?REQUEST_BY, Struct),

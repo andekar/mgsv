@@ -12,7 +12,10 @@
          terminate/2, code_change/3]).
 
 -define(GOOGLE_URL, "https://www.googleapis.com/oauth2/v1/userinfo?access_token=").
+-define(FACEBOOK_URL, "https://graph.facebook.com/me?access_token=").
 -define(EMAIL, <<"email">>).
+-define(FBUID, <<"username">>).
+
 -define(VALIDATE_USR_TBL, validate_usr_tbl).
 -define(INTERVAL, 60000 * 60). % One hour
 
@@ -42,6 +45,19 @@ handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
              end
     end;
 
+handle_call({validate, Token, Uid, ?FACEBOOK_USER}, _From, State = [TabName]) ->
+    ShaToken = crypto:hash(sha512, Token),
+    case ets:lookup(TabName, Uid) of
+        [{Uid, ShaToken}] ->
+            {reply, Uid, State};
+        _ -> case validate(Token, ?FACEBOOK_USER) of
+                 Uid ->
+                     ets:insert(TabName, {Uid, ShaToken}),
+                     {reply, Uid, State};
+                 _ -> {reply, undefined, State}
+             end
+    end;
+
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
     {reply, ok, State}.
@@ -67,8 +83,13 @@ code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     {ok, State}.
 
+
+validate(Token, UserType) when is_binary(Token) ->
+    validate(binary_to_list(Token), UserType);
 validate(Token, ?GMAIL_USER) ->
-    validate_google(binary_to_list(Token));
+    validate_google(Token);
+validate(Token, ?FACEBOOK_USER) ->
+    validate_facebook(Token);
 validate(_Token, _Val) ->
     {error, undefined_usertype}.
 
@@ -82,3 +103,14 @@ validate_google(Token) ->
         = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
     {struct, List} = mochijson2:decode(Body),
     proplists:get_value(?EMAIL, List).
+
+validate_facebook(Token) ->
+    Method = get,
+    URL = ?FACEBOOK_URL ++ Token,
+    Header = [],
+    HTTPOptions = [],
+    Options = [],
+    {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
+        = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
+    {struct, List} = mochijson2:decode(Body),
+    proplists:get_value(?FBUID, List).
