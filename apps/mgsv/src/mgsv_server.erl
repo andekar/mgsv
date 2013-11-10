@@ -82,6 +82,14 @@ handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
 %return res
 handle_call({'GET', ReqBy, Path, https}, _From, State) ->
     case Path of
+        ["countries"] ->
+            {reply, {ok, mochijson2:encode(exchangerates_server:countries())}, State};
+        ["country", CountryCode] ->
+            {reply, {ok, mochijson2:encode([exchangerates_server:country(list_to_binary(CountryCode))])}, State};
+        ["rates"] ->
+            {reply, {ok, mochijson2:encode(exchangerates_server:rates())}, State};
+        ["rate", CountryCode] ->
+            {reply, {ok, mochijson2:encode([exchangerates_server:rate(list_to_binary(CountryCode))])}, State};
         ["users"|Uids] ->
             RealUids = lists:map(fun(Val) -> {?UID, list_to_binary(Val)} end, Uids),
             Struct = pay_server:get_usernames(RealUids),

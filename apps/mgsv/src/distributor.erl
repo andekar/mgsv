@@ -46,6 +46,14 @@ resource_exists(ReqData, Context) ->
             {true, ReqData, Context};
         {'GET', ["transactions"|_ToFrom], https} ->
             {true, ReqData, Context};
+        {'GET', ["countries"], https} ->
+            {true, ReqData, Context};
+        {'GET', ["country", _CountryCode], https} ->
+            {true, ReqData, Context};
+        {'GET', ["rates"], https} ->
+            {true, ReqData, Context};
+        {'GET', ["rate", _CountryCode], https} ->
+            {true, ReqData, Context};
 
         {'DELETE', ["feedback",_More], https} ->
             {true, ReqData, Context};

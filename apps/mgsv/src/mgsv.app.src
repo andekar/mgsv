@@ -12,7 +12,8 @@
                   webmachine,
                   ossp_uuid,
                   ssl,
-                  asn1
+                  asn1,
+                  exchangerates
                  ]},
   {mod, { mgsv_app, []}},
   {env, []}

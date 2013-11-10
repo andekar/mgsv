@@ -583,14 +583,16 @@ currency_and_amount(Key, Props, DebtDb) ->
                     {currency(Props), amount(Props)};
                 {Other, []} ->
 %                    lager:alert("First Other looking up rate"),
-                    {Currency, exchange_rate:rate(Other, Currency) * amount(Props)};
+                    {res, Rate} = exchangerates_server:rate(Other, Currency),
+                    {Currency, Rate * amount(Props)};
                 {_Other, [{?ORG_DEBT, OrgD}]} -> case currency(OrgD) of
                                                      Currency ->
 %                                                         lager:alert("second Other using orgdebt"),
                                                          {Currency, amount(OrgD)};
                                                      OrgCurr ->
 %                                                         lager:alert("third Other looking up rate"),
-                                                         {Currency, exchange_rate:rate(OrgCurr, Currency) * amount(OrgD)}
+                                                         {res, Rate} = exchangerates_server:rate(OrgCurr, Currency),
+                                                         {Currency, Rate * amount(OrgD)}
                                                  end
             end
     end.
