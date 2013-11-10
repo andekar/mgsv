@@ -3,7 +3,7 @@
                   {update, distributor},
                   {update, pay_push_notification},
                   {update, validate_user},
-                  {update, exchange_rate},
+                  {delete_module, exchange_rate},
                   {update, mgsv_sup, supervisor},
                   {apply, {supervisor, restart_child, [mgsv_sup, pay_push_notification]}},
                   {apply, {supervisor, restart_child, [mgsv_sup, validate_user]}},
