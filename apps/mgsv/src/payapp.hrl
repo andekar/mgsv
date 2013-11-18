@@ -102,14 +102,14 @@
 -define(USERS, users).
 -define(USERS(Props), proplists:get_value(?USERS, Props)).
 
--define(USER_TYPE, usertype).
+-define(USER_TYPE, <<"usertype">>).
 -define(USER_TYPE(Type), {?USER_TYPE, Type}).
 
 %% TODO this will be removed later
--define(USER_TYPE1, usertype1).
+-define(USER_TYPE1, <<"usertype1">>).
 -define(USER_TYPE1(Type), {?USER_TYPE1, Type}).
 
--define(USER_TYPE2, usertype2).
+-define(USER_TYPE2, <<"usertype2">>).
 -define(USER_TYPE2(Type), {?USER_TYPE2, Type}).
 
 -define(LOCAL_USER, <<"local">>).

@@ -40,7 +40,7 @@ start_link() ->
 
 init([]) ->
     {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
-    {_,B} = db_w:open_file("../../users_0.3.2.dets",[{type, set}]),
+    {_,B} = db_w:open_file("../../users_0.3.4.dets",[{type, set}]),
     {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
     {_,D} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
     {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
@@ -519,9 +519,19 @@ terminate(Reason, State) ->
     db_w:close(DebtTransactions),
     ok.
 
-code_change(OldVsn, State, "0.3.3") ->
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.3"]),
-    {ok, State};
+code_change(OldVsn, State, "0.3.4") ->
+    Users = ?USERS(State),
+    {_,B} = db_w:open_file("../../users_0.3.4.dets",[{type, set}]),
+    db_w:traverse(Users,
+                  fun({Uuid,Props}) ->
+                          Usertype = proplists:get_value(usertype, Props),
+                          NewProps = proplists:delete(usertype, Props),
+                          db_w:insert(B,{Uuid, [{<<"usertype">>, Usertype} | NewProps]}),
+
+                          continue
+                  end),
+    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.4"]),
+    {ok, [{?USERS, B} | proplists:delete(?USERS, State)]};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
