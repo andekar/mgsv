@@ -519,19 +519,9 @@ terminate(Reason, State) ->
     db_w:close(DebtTransactions),
     ok.
 
-code_change(OldVsn, State, "0.3.4") ->
-    Users = ?USERS(State),
-    {_,B} = db_w:open_file("../../users_0.3.4.dets",[{type, set}]),
-    db_w:traverse(Users,
-                  fun({Uuid,Props}) ->
-                          Usertype = proplists:get_value(usertype, Props),
-                          NewProps = proplists:delete(usertype, Props),
-                          db_w:insert(B,{Uuid, [{<<"usertype">>, Usertype} | NewProps]}),
-
-                          continue
-                  end),
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.4"]),
-    {ok, [{?USERS, B} | proplists:delete(?USERS, State)]};
+code_change(OldVsn, State, "0.3.5") ->
+    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.5"]),
+    {ok, State};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
