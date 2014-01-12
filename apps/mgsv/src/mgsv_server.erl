@@ -58,8 +58,17 @@ handle_call({'PUT', ReqBy, Path, Props, https}, _From, State) ->
 handle_call({'POST', ReqBy, Path, Props, https}, _From, State) ->
     case Path of
         ["users"] -> %%We should return the created user(s)
-            User = pay_server:register_user(Props),
-            {reply, {ok, mochijson2:encode([?JSONSTRUCT([{?USER, User}])])}, State};
+            lager:info("Creating users: ~p", [Props]),
+            Users = proplists:lookup_all(?USER, Props),
+            UUsers = case Users of
+                         [{?USER, MaybeList} | _MaybeMore] when is_list(MaybeList)-> Users;
+                         _    -> [{?USER, Props}]
+                     end,
+            UUser = lists:map(fun({?USER, User}) ->
+                                      Res = pay_server:register_user(User),
+                                      ?JSONSTRUCT([{?USER,Res}])
+                              end, UUsers),
+            {reply, {ok, mochijson2:encode(UUser)}, State};
         ["transactions"] ->
             Transactions = proplists:lookup_all(?TRANSACTION, Props),
             Reply = lists:map(fun({?TRANSACTION, Vars}) ->

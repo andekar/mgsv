@@ -306,7 +306,8 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
 
 handle_call({register, UserInfo}, _From, State) ->
     Users = ?USERS(State),
-    UidLower  = verify_uid(?UID_TO_LOWER(uid(UserInfo)), Users),
+    EchoUuid = proplists:lookup_all(?ECHO_UUID, UserInfo),
+    UidLower  = verify_uid(uid_to_lower(uid(UserInfo)), Users),
     RepUserType = case string:rstr(binary_to_list(UidLower), "@") of
                       0 -> ?LOCAL_USER;
                       _ -> ?GMAIL_USER
@@ -318,14 +319,17 @@ handle_call({register, UserInfo}, _From, State) ->
            , username(username(UserInfo))
            , user_type(UserType)
            , currency(Currency)
-           , ServerTimestamp],
-    case db_w:lookup(Users, UidLower) of
-        %% make sure that we never autogenerate username
-        [] -> db_w:insert(Users, {UidLower, User}),
-              lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p", [UidLower, username(username(UserInfo)), UserType, Currency]);
-        _  -> lager:info("User already exist")
-    end,
-    {reply, User,  State};
+           , ServerTimestamp] ++ EchoUuid,
+    RetUsr = case db_w:lookup(Users, UidLower) of
+                 %% make sure that we never autogenerate username
+                 [] -> db_w:insert(Users, {UidLower, User}),
+                       lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
+                                  [UidLower, username(username(UserInfo)), UserType, Currency]),
+                       User;
+                 {_UUid, U}  -> lager:info("User already exist"),
+                               U
+             end,
+    {reply, RetUsr,  State};
 
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
