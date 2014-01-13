@@ -140,20 +140,18 @@ mgsv
 ######
 ```json
 [ {"transaction" :
-           { "user1"      : "anders"
+           { "uuid"       : "uniqueid"
            , "uid1"       : "anders@gmail.com"  // This will be a created one if not given at input
-           , "user_type1" : "gmail" | "local" | "facebook"
+           , "usertype1"  : "gmail" | "local" | "facebook"
            , "reason"     : "cinema ticket Riddick"
            , "amount"     : 100
-           , "user2"      : "petter"
            , "uid2"       : "petter@gmail.com"  // This will be a created one if not given at input
-           , "user_type2" : "gmail" | "local" | "facebook"
+           , "usertype2"  : "gmail" | "local" | "facebook"
            , "currency"   : "SEK" | "NOK" | ...
            , "timestamp"  : 12346567            // seconds since 1970
            , "server_timestamp" : 12346567     // seconds since 1970
-           , "echo_uuid"  : "324237483"         // any client created guid
            , "status"     : "ok"
-           , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
+           , "org_debt"   : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
            }
@@ -194,10 +192,12 @@ mgsv
 **DATA:**
 ######
 ```json
-[ {"uid"        : "robert.f@gmail.com"}
-, {"name"       : "Robert"}
-, {"usertype"   : "gmail" | "local" | "facebook"}
-, {"currency"   : "SEK" | "NOK" | ...}
+[ {user : {"uid"        : "robert.f@gmail.com"} // OPTIONAL if not given, one will be created
+        , {"name"       : "Robert"}
+        , {"usertype"   : "gmail" | "local" | "facebook"} // OPTIONAL if not given it will become either gmail or local
+        , {"currency"   : "SEK" | "NOK" | ...}
+        , {"echo_uuid"  : "a_unique_id"}
+  }
 ]
 ```
 **RETURN:**
@@ -208,6 +208,7 @@ mgsv
         , {"usertype"         : "gmail" | "local" | "facebook"}
         , {"currency"         : "SEK" | "NOK" | ...}
         , {"server_timestamp" : time_since_1970}
+        , {"echo_uuid"  : "a_unique_id"}
   }
 ]
 ```
