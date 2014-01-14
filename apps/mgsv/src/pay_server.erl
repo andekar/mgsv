@@ -30,6 +30,10 @@
          , add_feedback/2
          , get_feedback/0
          , remove_feedback/1
+          %% debug functions
+         , d_gmail_users/0
+         , d_facebook_users/0
+         , d_local_users/0
         ]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -98,7 +102,31 @@ get_feedback() ->
 remove_feedback(Uuid) ->
     gen_server:cast(?MODULE, {remove_feedback, Uuid}).
 
+%%DEBUG
+d_gmail_users() ->
+    gen_server:call(?MODULE, d_gmail_users).
+
+d_facebook_users() ->
+    gen_server:call(?MODULE, d_facebook_users).
+
+d_local_users() ->
+    gen_server:call(?MODULE, d_local_users).
+
 %% callbacks
+%%debug
+handle_call(d_gmail_users, _From, State) ->
+    Users = ?USERS(State),
+    {reply, users(?GMAIL_USER, Users), State};
+
+handle_call(d_facebook_users, _From, State) ->
+    Users = ?USERS(State),
+    {reply, users(?FACEBOOK_USER, Users), State};
+
+handle_call(d_local_users, _From, State) ->
+    Users = ?USERS(State),
+    {reply, users(?LOCAL_USER, Users), State};
+
+%% ordinary
 handle_call(get_users, _From, State) ->
     Users = ?USERS(State),
     UserList = db_w:foldl(fun({_Uuid, PropList}, Acc) ->
@@ -326,8 +354,8 @@ handle_call({register, UserInfo}, _From, State) ->
                        lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
                                   [UidLower, username(username(UserInfo)), UserType, Currency]),
                        User;
-                 {_UUid, U}  -> lager:info("User already exist"),
-                               U
+                 [{_UUid, U}]  -> lager:info("User already exist"),
+                                  U
              end,
     {reply, RetUsr,  State};
 
@@ -525,10 +553,12 @@ terminate(Reason, State) ->
 
 code_change(OldVsn, State, "0.3.5") ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.5"]),
+    application:set_env(webmachine, server_name, "PayApp/0.3.5"),
     {ok, State};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
+    application:set_env(webmachine, server_name, "PayApp/" ++ Extra),
     {ok, State}.
 
 
@@ -752,3 +782,11 @@ props(Name, {Name, Val}) ->
     Val;
 props(Name, Arg) ->
     {Name, Arg}.
+
+
+users(Type, Users) ->
+    db_w:foldl(fun({_Uuid, PropList} = User, Acc) ->
+                       case proplists:get_value(?USER_TYPE, PropList) of
+                           Type -> [User | Acc];
+                           _ -> Acc
+                       end end, [], Users).

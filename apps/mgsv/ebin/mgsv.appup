@@ -3,14 +3,13 @@
                   {update, distributor},
                   {update, pay_push_notification},
                   {update, validate_user},
-                  {delete_module, exchange_rate},
                   {update, mgsv_sup, supervisor},
                   {apply, {supervisor, restart_child, [mgsv_sup, pay_push_notification]}},
                   {apply, {supervisor, restart_child, [mgsv_sup, validate_user]}},
                   {apply, {supervisor, terminate_child, [mgsv_sup, machine_sup]}},
                   {update, machine_sup, supervisor},
-                  {update, mgsv_server,{advanced, "0.3.4"}},
-                  {update, pay_server, {advanced, "0.3.4"}},
+                  {update, mgsv_server,{advanced, "0.3.5"}},
+                  {update, pay_server, {advanced, "0.3.5"}},
                   {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
                  ]}],
         [{"0.3.4", []}]}.

@@ -70,7 +70,7 @@ resource_exists(ReqData, Context) ->
         {Method, Path, https} ->
             lager:alert("request denied method ~p path ~p", [Method, Path]),
             {false, ReqData, Context};
-        _ -> {true, ReqData, Context} %% we do not want to change http version now
+        _ -> {false, ReqData, Context} %% we do not want to change http version now
     end.
 
 malformed_request(ReqData, Context) ->
@@ -146,18 +146,12 @@ from_json(ReqData, Context) ->
     Method = ReqData#wm_reqdata.method,
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}] = proplists:lookup_all(json, Context),
-    [{userdata, Auth}]    = proplists:lookup_all(userdata, Context),
+    [{userdata, Auth}] = proplists:lookup_all(userdata, Context),
     Reply =
         case {replace_request_by(Decoded, Auth, Scheme), Scheme} of
-            {{ok, Props}, http} -> error_logger:info_msg("~p ~p ~p", [Method, Url, Props]),
-                                   try
-                                       {ok, Result} = mgsv_server:send_message({Url, Props, Scheme}),
-                                       Result
-                                   catch
-                                       _:Error ->
-                                           lager:alert("CRASH ~p", [Error]),
-                                           mochijson2:encode([[{error,request_failed}]])
-                                   end;
+            {{ok, _Props}, http} ->
+                "operation not allowed";
+
             {{ok, Props}, https} -> error_logger:info_msg("~p ~p ~p", [Method, Url, Props]),
                                     try
                                         {ok, Result} = mgsv_server:send_message({Method, proplists:get_value(?REQUEST_BY, Props),
@@ -180,14 +174,8 @@ to_html(ReqData, Context) ->
     Method = ReqData#wm_reqdata.method,
     {Body, _RD, Ctx2} =
         case {wrq:path_tokens(ReqData), Scheme} of
-            {Any, http} ->
-                error_logger:info_msg("~p ~p",[Method, Any]),
-                {ok, Result} = try mgsv_server:send_message({Any, Scheme})
-                               catch
-                                   _:Err ->
-                                       lager:alert("CRASH ~p", [Err]),
-                                       {ok, mochijson2:encode([[{error,request_failed}]])}
-                               end,
+            {_Any, http} ->
+                Result = "Operation not allowed",
                 {Result, ReqData, Context};
             {Any, https} ->
                 error_logger:info_msg("~p ~p",[Method, Any]),

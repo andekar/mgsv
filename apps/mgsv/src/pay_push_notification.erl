@@ -40,7 +40,8 @@ remove_ios_token(Token) ->
 handle_call(print_users, _From, State) ->
     dets:traverse(State,
                   fun({Uuid, DevTok, Count}) ->
-                          lager:info("Uuid ~p DevTok ~p Count ~p", [Uuid, DevTok, Count])
+                          lager:info("Uuid ~p DevTok ~p Count ~p", [Uuid, DevTok, Count]),
+                          continue
                   end),
     {reply, ok, State};
 
@@ -60,14 +61,24 @@ handle_cast({add_user_ios, Uuid, DevId}, State) ->
     end,
     {noreply, State};
 
+handle_cast({notify_user, Uuid, Message}, State) when is_list(Message) ->
+    handle_cast({notify_user, Uuid, list_to_binary(Message)}, State);
+
+handle_cast({notify_user, Uuid, Message}, State) when is_list(Uuid) ->
+    handle_cast({notify_user, list_to_binary(Uuid), Message}, State);
+
 handle_cast({notify_user, Uuid, Message}, State) ->
     case dets:lookup(State, Uuid) of
         Any when is_list(Any) ->
             lists:map(fun({_Uuid, DevTok, Count}) ->
-                              lager:info("devicetoken ~p message ~p count ~p Uuid ~p", [DevTok, binary_to_list(Message), Count, Uuid]),
-                              apns:send_message(payapp, DevTok, Message, Count + 1),
-                              dets:delete_object(State, {Uuid, DevTok, Count}),
-                              dets:insert(State, {Uuid, DevTok, Count + 1})
+                              try
+                                  lager:info("devicetoken ~p message ~p count ~p Uuid ~p", [DevTok, binary_to_list(Message), Count, Uuid]),
+                                  apns:send_message(payapp, DevTok, Message, Count + 1),
+                                  dets:delete_object(State, {Uuid, DevTok, Count}),
+                                  dets:insert(State, {Uuid, DevTok, Count + 1})
+                              catch
+                                  _:_ -> dets:delete_object(State, {Uuid, DevTok, Count})
+                              end
                       end, Any),
             {noreply, State};
         _ -> {norely, State}
@@ -78,9 +89,13 @@ handle_cast({clear_counter, Uuid}, State) ->
         Any when is_list(Any) ->
             lists:map(fun({_Uuid, DevTok, Count}) ->
                               lager:info("clear count devicetoken ~p count ~p uuid ~p", [DevTok, Count, Uuid]),
-                              apns:send_badge(payapp, DevTok, 0),
-                              dets:delete_object(State, {Uuid, DevTok, Count}),
-                              dets:insert(State, {Uuid, DevTok, 0})
+                              try
+                                  apns:send_badge(payapp, DevTok, 0),
+                                  dets:delete_object(State, {Uuid, DevTok, Count}),
+                                  dets:insert(State, {Uuid, DevTok, 0})
+                              catch
+                                  _:_ -> dets:delete_object(State, {Uuid, DevTok, Count})
+                              end
                       end, Any),
             {noreply, State};
         _ -> {norely, State}
