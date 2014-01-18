@@ -56,10 +56,6 @@ mgsv
   }
   , ...
 ]
-**or**
-```json
-[{"error" : "request_failed"}]
-```
 
 **URL:**  transactions/{id}
 ##
@@ -122,10 +118,6 @@ mgsv
   }
 , ... // more transactions
 ]
-```
-**or**
-```json
-[{"error" : "request_failed"}]
 ```
 
 **URL:**  transactions/[num] | [from]/[num] | [userid]/[from]/[num]
@@ -286,4 +278,26 @@ mgsv
   , "server_timestamp":1381214519568941 }
  }, ...
 ]
+```
+
+**URL:**  countries
+##
+**METHOD** GET
+######
+**RETURN:**
+######
+```json
+[{<<"BTN">>,<<"Bhutanese Ngultrum">>},
+ ... ]
+```
+
+**URL:**  rates
+##
+**METHOD** GET
+######
+**RETURN:**
+######
+```json
+[ {<<"GMD">>,38.09304},
+ ... ]
 ```
