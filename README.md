@@ -287,8 +287,8 @@ mgsv
 **RETURN:**
 ######
 ```json
-[{<<"BTN">>,<<"Bhutanese Ngultrum">>},
- ... ]
+{"BTN" : "Bhutanese Ngultrum",
+ ...}
 ```
 
 **URL:**  rates
@@ -298,6 +298,6 @@ mgsv
 **RETURN:**
 ######
 ```json
-[ {<<"GMD">>,38.09304},
- ... ]
+{"GMD" : 38.09304,
+ ... }
 ```
