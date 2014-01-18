@@ -101,7 +101,8 @@ mgsv
 ######
 ```json
 [ {"transaction" :
-           { "user1"      : "anders"
+           { "uuid"       : "uniqueid"
+           , "user1"      : "anders"
            , "uid1"       : "anders@gmail.com"  // This will be a created one if not given at input
            , "user_type1" : "gmail" | "local" | "facebook"
            , "reason"     : "cinema ticket Riddick"
@@ -113,7 +114,7 @@ mgsv
            , "timestamp"  : 12346567            // seconds since 1970
            , "server_timestamp" : 12346567     // seconds since 1970
            , "echo_uuid"  : "324237483"         // any client created guid
-           , "status"     : "ok"
+           , "status"     : "ok" | "failed"
            , "org_debt"  : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
@@ -150,7 +151,6 @@ mgsv
            , "currency"   : "SEK" | "NOK" | ...
            , "timestamp"  : 12346567            // seconds since 1970
            , "server_timestamp" : 12346567     // seconds since 1970
-           , "status"     : "ok"
            , "org_debt"   : { "exchange_rate"   : 0.18  // this is in case there is a second currency involved
                            , "currency" : "SEK" | "NOK" | ...
                            }
@@ -158,10 +158,6 @@ mgsv
   }
 , ... // more transactions
 ]
-```
-**or**
-```json
-[{"error" : "request_failed"}]
 ```
 **NOTE** the list returned is sorted based on SERVER_TIMESTAMP
 
