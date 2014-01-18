@@ -217,7 +217,7 @@ is_authorized(ReqData, Context) ->
                     lager:alert("Access denied authorization field: ~p", [Any]),
                     {"Basic realm=webmachine", ReqData, Context}
             end;
-        _ -> {true, ReqData, Context}
+        _ -> {false, ReqData, Context}
     end.
 
 destructify(List) when is_list(List)->

@@ -239,11 +239,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                              end,
                             {Uid, PropList} end,
                     [{?USER1, ?UID1}, {?USER2, ?UID2}]),
-    %Check uid1 != uid2
-    ok = case Uid1 of
-             Uid2 -> can_not_add_debt_to_self;
-             _ -> ok
-         end,
+
     SortedUDebt = sort_user_debt(Uid1, Uid2, Amount),
     SortMult = Amount/amount(SortedUDebt),
     OrgDebt = case {amount(SortedUDebt) == Amount, proplists:lookup_all(?ORG_DEBT, Struct)} of
@@ -262,22 +258,31 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                                                     , {?UUID, Uuid}
                                                     , ServerTimeStamp]
                                       ++ OrgDebt,
-    ok = case { proplists:lookup(?USER_TYPE, PropList1)
-              , proplists:lookup(?USER_TYPE, PropList2)} of
-             %don't add debts between two localusers
-             {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
-             _       ->
-                 add_transaction(SortedDebt, ApprovalDebt, Debts)
-         end,
-
-    lager:info("Inserting Debt: ~p", [SortedDebt]),
-    db_w:insert(DebtTransactions, {Uuid, SortedDebt}),
-    _ = case ReqBy of
-            Uid1 -> pay_push_notification:notify_user(Uid2, Reason);
-            Uid2 -> pay_push_notification:notify_user(Uid1, Reason);
-            _ -> pay_push_notification:notify_user(Uid1, Reason),
-                 pay_push_notification:notify_user(Uid2, Reason)
-        end,
+    %Check uid1 != uid2
+    AddToSelf = case Uid1 of
+                    Uid2 -> can_not_add_debt_to_self;
+                    _ -> ok
+                end,
+    AddLocal = case { proplists:lookup(?USER_TYPE, PropList1)
+                      , proplists:lookup(?USER_TYPE, PropList2)} of
+                     %don't add debts between two localusers
+                   {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
+                   _       -> ok
+               end,
+    Status = case {AddToSelf, AddLocal} of
+                 {ok, ok} ->
+                     add_transaction(SortedDebt, ApprovalDebt, Debts),
+                     lager:info("Inserting Debt: ~p", [SortedDebt]),
+                     db_w:insert(DebtTransactions, {Uuid, SortedDebt}),
+                     case ReqBy of
+                         Uid1 -> pay_push_notification:notify_user(Uid2, Reason);
+                         Uid2 -> pay_push_notification:notify_user(Uid1, Reason);
+                         _ -> pay_push_notification:notify_user(Uid1, Reason),
+                              pay_push_notification:notify_user(Uid2, Reason)
+                     end,
+                     <<"ok">>;
+                 _ -> <<"failed">>
+             end,
     OD = proplists:get_value(?ORG_DEBT, OrgDebt),
     %% this should be changed to [{paid_by:[{user}]}, {paid_for:[user,user]}]
     {reply, [ % first user stuff
@@ -297,7 +302,7 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
             , ?CURRENCY(Currency) %% saved for backwardscompability
             , timestamp(TimeStamp)
             , ServerTimeStamp
-            , ?STATUS(<<"ok">>)
+            , ?STATUS(Status)
             ] ++ EchoUuid
               ++ [{?ORG_DEBT,
                    replace_prop(?AMOUNT, OD, amount(OD) * SortMult)}]
@@ -309,27 +314,33 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     Debts = ?DEBTS(State),
     % crash if there is no such debt
-    [{Uuid, Items}] = db_w:lookup(DebtTransactions, Uuid),
+    %% todo fix this, if there is no such debt then we say OK
+    %%[{Uuid, Items}] = db_w:lookup(DebtTransactions, Uuid),
+    case db_w:lookup(DebtTransactions, Uuid) of
+        [{Uuid, Items}] ->
+            %crash if reqby is not one of the uids in the debt
+            ok = case {uid1(Items), uid2(Items)} of
+                     {ReqBy, _} -> ok;
+                     {_ , ReqBy} -> ok;
+                     _ -> {error, requestby_not_part_of_transaction}
+                 end,
+            db_w:delete(DebtTransactions, Uuid),
+            Uid1 = proplists:get_value(?UID1, Items),
+            Uid2 = proplists:get_value(?UID2, Items),
+            Amount = proplists:get_value(?AMOUNT, Items), %% TODO fix this
+            remove_debt(Uid1, ApprovalDebt, Uuid),
+            remove_debt(Uid2, ApprovalDebt, Uuid),
 
-    %crash if reqby is not one of the uids in the debt
-    ok = case {uid1(Items), uid2(Items)} of
-             {ReqBy, _} -> ok;
-             {_ , ReqBy} -> ok;
-             _ -> {error, requestby_not_part_of_transaction}
-         end,
-    db_w:delete(DebtTransactions, Uuid),
-    Uid1 = proplists:get_value(?UID1, Items),
-    Uid2 = proplists:get_value(?UID2, Items),
-    Amount = proplists:get_value(?AMOUNT, Items), %% TODO fix this
-    remove_debt(Uid1, ApprovalDebt, Uuid),
-    remove_debt(Uid2, ApprovalDebt, Uuid),
-
-    add_to_earlier_debt( -1* amount(sort_user_debt(Uid1, Uid2, Amount))
-                       , {Uid1, Uid2}
-                       , currency(Items)
-                       , Debts
-                       ),
-    lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]),
+            add_to_earlier_debt( -1* amount(sort_user_debt(Uid1, Uid2, Amount))
+                                 , {Uid1, Uid2}
+                                 , currency(Items)
+                                 , Debts
+                               ),
+            lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]);
+        %% below shows something corrupt action should be taken
+        [{_Uuid, _Items} | _More] = List -> lager:info("ERROR delete_debt ~p", [List]);
+        _ -> ok
+    end,
     {reply, ok, State};
 
 handle_call({register, UserInfo}, _From, State) ->
@@ -418,28 +429,29 @@ handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
     ReqBy = ?UID_TO_LOWER(TReqBy),
     ResDebts = get_tot_debts(Debts, TOldUser),
 
-    [{{P1, P2}, _V}] = lists:filter(fun({{PP1, PP2}, _}) ->
-                                          case {PP1, PP2} of
-                                              {ReqBy, _} -> true;
-                                              {_, ReqBy} -> true;
-                                              _ -> false
-                                          end end, ResDebts),
+    Res = lists:filter(fun({{PP1, PP2}, _}) ->
+                               case {PP1, PP2} of
+                                   {ReqBy, _} -> true;
+                                   {_, ReqBy} -> true;
+                                   _ -> false
+                               end end, ResDebts),
+    case Res of
+        [{{P1, P2}, _V}] ->
+            % delete the debt
+            db_w:delete(Debts, {P1, P2}),
 
-    % delete the debt
-    db_w:delete(Debts, {P1, P2}),
+            % all debts are approved
+            DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
-    % all debts are approved
-    DebtIds = approved_debts(TOldUser, ApprovalDebt),
+            %% if there is just one debt and we have a local user here
+            case {ResDebts, OldUserType} of
+                {{P1, P2, _}, ?LOCAL_USER} ->
+                    ok = db_w:delete(Users, TOldUser),
+                    ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
+                _ -> ok
+            end,
 
-    %% if there is just one debt and we have a local user here
-    case {ResDebts, OldUserType} of
-        {{P1, P2, _}, ?LOCAL_USER} ->
-            ok = db_w:delete(Users, TOldUser),
-            ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
-        _ -> ok
-    end,
-
-    _DebtLists = lists:map(
+            _DebtLists = lists:map(
                    fun(Id) ->
                            [{Id, Items}] = db_w:lookup(DebtTransactions, Id),
                            case {get_value(?UID1, Items), get_value(?UID2, Items)} of
@@ -450,7 +462,11 @@ handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
                            end
                    end, DebtIds),
 
-    lager:info("Removed debts from ~p ~n", [TOldUser]),
+            lager:info("Removed debts from ~p ~n", [TOldUser]);
+        [{{_,_},_}| _More] = List -> lager:info("ERROR in remove_user_debt ~p", [List]);
+        _ -> ok
+    end,
+
     {noreply, State};
 
 % The user transferring debts must be the creator (ReqBy)
