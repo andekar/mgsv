@@ -313,9 +313,6 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     Debts = ?DEBTS(State),
-    % crash if there is no such debt
-    %% todo fix this, if there is no such debt then we say OK
-    %%[{Uuid, Items}] = db_w:lookup(DebtTransactions, Uuid),
     case db_w:lookup(DebtTransactions, Uuid) of
         [{Uuid, Items}] ->
             %crash if reqby is not one of the uids in the debt
@@ -354,21 +351,26 @@ handle_call({register, UserInfo}, _From, State) ->
     UserType = proplists:get_value(?USER_TYPE, UserInfo, RepUserType), %%
     Currency = proplists:get_value(?CURRENCY, UserInfo, ?SWEDISH_CRONA),
     ServerTimestamp = server_timestamp(get_timestamp()),
-    User = [ uid(UidLower)
-           , username(username(UserInfo))
-           , user_type(UserType)
-           , currency(Currency)
-           , ServerTimestamp] ++ EchoUuid,
-    RetUsr = case db_w:lookup(Users, UidLower) of
-                 %% make sure that we never autogenerate username
-                 [] -> db_w:insert(Users, {UidLower, User}),
-                       lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
-                                  [UidLower, username(username(UserInfo)), UserType, Currency]),
-                       User;
-                 [{_UUid, U}]  -> lager:info("User already exist"),
-                                  U
-             end,
-    {reply, RetUsr,  State};
+    UserName = username(UserInfo),
+    case UserName of
+        UserName when is_binary(UserName) ->
+            User = [ uid(UidLower)
+                     , username(UserName)
+                     , user_type(UserType)
+                     , currency(Currency)
+                     , ServerTimestamp] ++ EchoUuid,
+            RetUsr = case db_w:lookup(Users, UidLower) of
+                         %% make sure that we never autogenerate username
+                         [] -> db_w:insert(Users, {UidLower, User}),
+                               lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
+                                          [UidLower, username(UserName), UserType, Currency]),
+                               User;
+                         [{_UUid, U}]  -> lager:info("User already exist"),
+                                          U
+                     end,
+            {reply, RetUsr,  State};
+        _ -> {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid, State}
+    end;
 
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
