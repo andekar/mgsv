@@ -569,9 +569,9 @@ terminate(Reason, State) ->
     db_w:close(DebtTransactions),
     ok.
 
-code_change(OldVsn, State, "0.3.5") ->
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.5"]),
-    application:set_env(webmachine, server_name, "PayApp/0.3.5"),
+code_change(OldVsn, State, "0.3.6") ->
+    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.6"]),
+    application:set_env(webmachine, server_name, "PayApp/0.3.6"),
     {ok, State};
 
 code_change(OldVsn, State, Extra) ->

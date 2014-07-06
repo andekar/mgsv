@@ -30,6 +30,8 @@ init([]) ->
     timer:send_interval(?INTERVAL, self(), trigger),
     {ok, [?VALIDATE_USR_TBL]}.
 
+%% handle_call({validate, _Token, <<"andersk84@gmail.com">>, ?GMAIL_USER}, _From, State) ->
+%%     {reply, <<"andersk84@gmail.com">>, State};
 handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
     ShaToken = crypto:hash(sha512, Token),
     case ets:lookup(TabName, Email) of
@@ -38,8 +40,6 @@ handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
         _ -> case validate(Token, ?GMAIL_USER) of
                  Email ->
                      ets:insert(TabName, {Email, ShaToken}),
-                     {reply, Email, State};
-                 <<"andersk84@gmail.com">> ->
                      {reply, Email, State};
                  _ -> {reply, undefined, State}
              end

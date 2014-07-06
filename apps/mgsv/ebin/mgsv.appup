@@ -1,5 +1,5 @@
 %% appup generated for mgsv by rebar ("2012/09/07 19:58:56")
-{"0.3.5", [{"0.3.4", [
+{"0.3.6", [{"0.3.5", [
                   {update, distributor},
                   {update, pay_push_notification},
                   {update, validate_user},
@@ -12,4 +12,4 @@
                   {update, pay_server, {advanced, "0.3.5"}},
                   {apply, {supervisor, restart_child, [mgsv_sup, machine_sup]}}
                  ]}],
-        [{"0.3.4", []}]}.
+        [{"0.3.5", []}]}.
