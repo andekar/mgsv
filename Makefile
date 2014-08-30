@@ -16,7 +16,6 @@ distclean: clean
 	@./rebar delete-deps
 
 release:
-	@./rebar clean
 	@./rebar compile
 	cd rel
 	@./rebar -v generate
