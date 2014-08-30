@@ -1,6 +1,7 @@
 -module(pay_server).
 
 -include("payapp.hrl").
+-include("common.hrl").
 
 -ifdef(TEST).
 -compile(export_all).
@@ -571,6 +572,11 @@ terminate(Reason, State) ->
 
 code_change(OldVsn, State, "0.3.6") ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.6"]),
+    mnesia:start(),
+    mnesia:stop(),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+    users:reconstruct(?USERS(State)),
     application:set_env(webmachine, server_name, "PayApp/0.3.6"),
     {ok, State};
 
@@ -578,7 +584,6 @@ code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     application:set_env(webmachine, server_name, "PayApp/" ++ Extra),
     {ok, State}.
-
 
 sort_user_debt(P1, P2, Amount) ->
     case P1 < P2 of
