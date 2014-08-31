@@ -1,8 +1,9 @@
 -module(users).
 
 -include("common.hrl").
+-include("payapp.hrl").
 
--export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1]).
+-export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1]).
 
 -record(user_mapping,
         { uid :: binary(), %% id from google or facebook or internal if local
@@ -20,7 +21,9 @@
         }).
 
 add(Uid, Username, DisplayName, UserType, Currency, ReqBy) ->
-    add(create(Uid, Username, DisplayName, UserType, Currency, ReqBy), ReqBy).
+    User = create(Uid, Username, DisplayName, UserType, Currency, ReqBy),
+    add(User, ReqBy),
+    User.
 
 add(User, ReqBy) ->
     case [users:get({username, User#user.username}),
@@ -109,6 +112,28 @@ create_usertable() ->
                           {disc_copies, [node()]},
                           {index, []},
                           {attributes, record_info(fields,user_info)}]).
+%% to keep up to old API
+update_parts([], User) ->
+    User;
+update_parts([{?USER, DisplayName}|Rest], User) ->
+    update_parts(Rest, User#user{displayname = DisplayName});
+update_parts([{?CURRENCY, Currency}|Rest], User) ->
+    update_parts(Rest, User#user{currency = Currency});
+update_parts([_NotSupported|Rest], User) ->
+    update_parts(Rest, User).
+
+to_proplist(User) ->
+    [{<<"uid">>, User#user.uid},
+     {<<"user">>, User#user.displayname},
+     {<<"usertype">>, User#user.user_type},
+     {<<"currency">>, User#user.currency},
+     {<<"server_timestamp">>, User#user.user_edit_details#edit_details.last_change}].
+
+%% from_proplist(PropList) ->
+%%     Uid = proplists:get_value(<<"uid">>, PropList),
+%%     DisplayName = proplists:get_value(<<"user">>, PropList),
+%%     UserType = proplists:get_value(<<"usertype">>, PropList),
+%%     Currency = proplists:get_value(<<"currency">>, PropList).
 
 reconstruct(DBName) ->
     dets:traverse(DBName,
@@ -143,3 +168,4 @@ reconstruct(DBName) ->
                           mnesia:dirty_write(UserInfo),
                           continue
                   end).
+

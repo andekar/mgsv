@@ -45,12 +45,10 @@ start_link() ->
 
 init([]) ->
     {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
-    {_,B} = db_w:open_file("../../users_0.3.4.dets",[{type, set}]),
     {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
     {_,D} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
     {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
     {ok, [ {?DEBTS,A}
-         , {?USERS, B}
          , {?DEBT_TRANSACTIONS, C}
          , {?DEBT_APPROVAL_TRANSACTIONS, D}
          , {?FEEDBACK, E}]}.
@@ -152,27 +150,19 @@ handle_call({add_feedback, ReqBy, Feedback}, _From, State) ->
                         , FB}),
     {reply, {ok, FB}, State};
 
+%%TODO fix transaction
 handle_call({change_userinfo, Uid, UserInfo}, _From, State) ->
-    Users = ?USERS(State),
-    Res = case db_w:lookup(Users, Uid) of
-              [{Uid, PropList}] ->
-                  ToChange = [?USER, ?CURRENCY],
-                  db_w:delete(Users, Uid),
-                  NewProplist =
-                      lists:foldl(fun(Change, Props) ->
-                                          case proplists:get_value(Change, UserInfo) of
-                                              undefined -> Props;
-                                              Val -> replace_prop(Change, Props, Val)
-                                          end
-                                  end, PropList, ToChange),
-                  db_w:insert(Users, {Uid, NewProplist}),
-                  ok;
-              Other ->
-                  lager:error("Tried changing username got ~p from db Uid ~p Un ~p"
-                              , [Other, Uid, UserInfo]),
-                  error
-          end,
-    {reply, [Res], State};
+    case users:get(Uid) of
+        User = #user{} ->
+            UUser = users:update_parts(UserInfo, User),
+            io:format("UserInfo ~p~n", [UserInfo] ),
+            users:update(UUser, UUser#user.internal_uid),
+            {reply, [users:to_proplist(UUser)], State};
+        Other ->
+            lager:error("Tried changing username got ~p from db Uid ~p Un ~p"
+                       , [Other, Uid, UserInfo]),
+            {reply, [], State}
+        end;
 
 handle_call({get_user_debt, User},  _From, State) ->
     {reply, get_tot_debts(?DEBTS(State), User), State};
@@ -192,16 +182,16 @@ handle_call({get_user_transactions, TUser},  _From, State) ->
 handle_call({user_exists, Uid}, _From, State) ->
     {reply, user_exist(Uid, State), State};
 
+%%TODO fix transactions
 handle_call({get_usernames, Uids}, _From, State) ->
-    Users = proplists:get_value(?USERS, State),
     RecUsers = lists:filter(fun({?UID, _}) -> true;
                                (_) -> false end, Uids),
     RetUsers = lists:map(fun({?UID, TUid}) ->
                       Uid = ?UID_TO_LOWER(TUid),
-                      case db_w:lookup(Users, Uid) of
-                          [] -> [{error, user_not_found}];
-                          [{Uid, PropList}] ->
-                              ?JSONSTRUCT(PropList)
+                      case users:get(Uid) of
+                          no_such_user -> [{error, user_not_found}];
+                          User ->
+                              ?JSONSTRUCT(users:to_proplist(User))
                       end
               end, RecUsers),
     {reply, RetUsers, State};
@@ -209,7 +199,6 @@ handle_call({get_usernames, Uids}, _From, State) ->
 handle_call({add, TReqBy, Struct}, _From, State) ->
     Debts = ?DEBTS(State),
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    Users = ?USERS(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
 
     Uuid = binary_uuid(),
@@ -222,25 +211,21 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
     ReqBy = ?UID_TO_LOWER(TReqBy),
 
     %% per user
-     [{Uid1, PropList1}, {Uid2, PropList2}]
+     [User1, User2]
         = lists:map(fun({P, U}) -> %% TODO add validation of verify_uid
-                    Uid  = verify_uid(uid_to_lower(proplists:get_value(U, Struct)), Users),
+                    Uid  = verify_uid(uid_to_lower(proplists:get_value(U, Struct)), []),
                     UserType = proplists:get_value(?USER_TYPE, Struct, ?LOCAL_USER),
-                    {Uid, PropList} = case db_w:lookup(Users, Uid) of
+                    User = #user{} = case users:get(Uid) of
                                       %% make sure that we never autogenerate username
-                                 [] -> [{P, User}] = proplists:lookup_all(P, Struct),
-                                       List = [ uid(Uid)
-                                              , username(User)
-                                              , user_type(UserType)
-                                              , currency(Currency)
-                                              , ServerTimeStamp],
-                                       db_w:insert(Users, {Uid, List}),
-                                       {Uid, List};
-                                 [Val]  -> Val
+                                 no_such_user ->
+                                       [{P, DisplayName}] = proplists:lookup_all(P, Struct),
+                                       users:add(Uid,Uid,DisplayName,UserType,Currency);
+                                 Val  -> Val
                              end,
-                            {Uid, PropList} end,
+                    User end,
                     [{?USER1, ?UID1}, {?USER2, ?UID2}]),
-
+    Uid1 = User1#user.username,
+    Uid2 = User2#user.username,
     SortedUDebt = sort_user_debt(Uid1, Uid2, Amount),
     SortMult = Amount/amount(SortedUDebt),
     OrgDebt = case {amount(SortedUDebt) == Amount, proplists:lookup_all(?ORG_DEBT, Struct)} of
@@ -264,8 +249,8 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
                     Uid2 -> can_not_add_debt_to_self;
                     _ -> ok
                 end,
-    AddLocal = case { proplists:lookup(?USER_TYPE, PropList1)
-                      , proplists:lookup(?USER_TYPE, PropList2)} of
+    AddLocal = case { User1#user.user_type
+                      , User2#user.user_type} of
                      %don't add debts between two localusers
                    {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
                    _       -> ok
@@ -288,13 +273,13 @@ handle_call({add, TReqBy, Struct}, _From, State) ->
     %% this should be changed to [{paid_by:[{user}]}, {paid_for:[user,user]}]
     {reply, [ % first user stuff
               ?UID1(Uid1)
-            , ?USER1(username(PropList1))
-            , ?USER_TYPE1(user_type(PropList1))
+            , ?USER1(User1#user.displayname)
+            , ?USER_TYPE1(User1#user.user_type)
 
               % second user stuff
             , ?UID2(Uid2)
-            , ?USER2(username(PropList2))
-            , ?USER_TYPE2(user_type(PropList2))
+            , ?USER2(User2#user.displayname)
+            , ?USER_TYPE2(User1#user.user_type)
 
             %% DEBT stuff
             , ?UUID(Uuid)
@@ -342,34 +327,28 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     {reply, ok, State};
 
 handle_call({register, UserInfo}, _From, State) ->
-    Users = ?USERS(State),
     EchoUuid = proplists:lookup_all(?ECHO_UUID, UserInfo),
-    UidLower  = verify_uid(uid_to_lower(uid(UserInfo)), Users),
+    UidLower  = verify_uid(uid_to_lower(uid(UserInfo)), []),
     RepUserType = case string:rstr(binary_to_list(UidLower), "@") of
                       0 -> ?LOCAL_USER;
                       _ -> ?GMAIL_USER
                   end,
     UserType = proplists:get_value(?USER_TYPE, UserInfo, RepUserType), %%
     Currency = proplists:get_value(?CURRENCY, UserInfo, ?SWEDISH_CRONA),
-    ServerTimestamp = server_timestamp(get_timestamp()),
     UserName = username(UserInfo),
     case UserName of
         UserName when is_binary(UserName) ->
-            User = [ uid(UidLower)
-                     , username(UserName)
-                     , user_type(UserType)
-                     , currency(Currency)
-                     , ServerTimestamp] ++ EchoUuid,
-            RetUsr = case db_w:lookup(Users, UidLower) of
+            RetUsr = case users:get(UidLower) of
                          %% make sure that we never autogenerate username
-                         [] -> db_w:insert(Users, {UidLower, User}),
-                               lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
-                                          [UidLower, username(UserName), UserType, Currency]),
-                               User;
-                         [{_UUid, U}]  -> lager:info("User already exist"),
-                                          U
+                         no_such_user ->
+                             User = users:add(UidLower,UidLower, UserName, UserType, Currency, UidLower),
+                             lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
+                                        [UidLower, username(UserName), UserType, Currency]),
+                             User;
+                         U  -> lager:info("User already exist"),
+                               U
                      end,
-            {reply, RetUsr,  State};
+            {reply, users:to_proplist(RetUsr) ++ EchoUuid,  State};
         _ -> {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid, State}
     end;
 
@@ -379,20 +358,23 @@ handle_call(Request, _From, State) ->
 
 %% notice how any one can change their username if we add this to calls
 handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
-    Users = ?USERS(State),
     Debts = ?DEBTS(State),
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
-    TNewUser = verify_uid(TNewUser, Users),
+    TNewUser = verify_uid(TNewUser, []),
 
-    [] = db_w:lookup(Users, TNewUser), %% make sure we do not create duplicate users.
-    [{TOldUser, PropList}] = db_w:lookup(Users, TOldUser), %% make sure there exists an old user
+    no_such_user = users:get(TNewUser),
+    User = #user{} = users:get(TOldUser),
 
-    ok = db_w:delete(Users, TOldUser),
-    db_w:insert(Users, {TNewUser, replace_prop(?UID, PropList, TNewUser)}),
+    ok = users:delete(User),
+    UUser = User#user{
+              uid = TNewUser,
+              username = TNewUser
+             },
+    users:add(UUser, TNewUser), %% TODO when we have both uid and username
 
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
@@ -423,14 +405,13 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
 
 handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
     Debts = ?DEBTS(State),
-    Users = ?USERS(State),
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
 
-    [{TOldUser, PropList}] = db_w:lookup(Users, ?UID_TO_LOWER(TUuid)),
-    OldUserType = proplists:get_value(?USER_TYPE, PropList),
+    OUser = users:get(?UID_TO_LOWER(TUuid)),
+    OldUserType = OUser#user.user_type,
     ReqBy = ?UID_TO_LOWER(TReqBy),
-    ResDebts = get_tot_debts(Debts, TOldUser),
+    ResDebts = get_tot_debts(Debts, OUser#user.username),
 
     Res = lists:filter(fun({{PP1, PP2}, _}) ->
                                case {PP1, PP2} of
@@ -444,13 +425,13 @@ handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
             db_w:delete(Debts, {P1, P2}),
 
             % all debts are approved
-            DebtIds = approved_debts(TOldUser, ApprovalDebt),
+            DebtIds = approved_debts(OUser#user.username, ApprovalDebt),
 
             %% if there is just one debt and we have a local user here
             case {ResDebts, OldUserType} of
-                {{P1, P2, _}, ?LOCAL_USER} ->
-                    ok = db_w:delete(Users, TOldUser),
-                    ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
+                {[{{P1, P2}, _}], ?LOCAL_USER} ->
+                    ok = users:delete(OUser),
+                    ok = db_w:delete(ApprovalDebt, OUser#user.username); %% should not cause any problems
                 _ -> ok
             end,
 
@@ -459,13 +440,13 @@ handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
                            [{Id, Items}] = db_w:lookup(DebtTransactions, Id),
                            case {get_value(?UID1, Items), get_value(?UID2, Items)} of
                                {P1, P2} ->         %delete the approved debt id
-                                   ok = remove_debt(TOldUser, ApprovalDebt, Id),
+                                   ok = remove_debt(OUser#user.username, ApprovalDebt, Id),
                                    ok = remove_debt(ReqBy, ApprovalDebt, Id);
                                _ -> ok
                            end
                    end, DebtIds),
 
-            lager:info("Removed debts from ~p ~n", [TOldUser]);
+            lager:info("Removed debts from ~p ~n", [OUser]);
         [{{_,_},_}| _More] = List -> lager:info("ERROR in remove_user_debt ~p", [List]);
         _ -> ok
     end,
@@ -475,7 +456,6 @@ handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
 % The user transferring debts must be the creator (ReqBy)
 handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     Debts = ?DEBTS(State),
-    Users = ?USERS(State),
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
 
@@ -504,13 +484,15 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
                                                 _ -> false
                                             end end, ResDebts),
 
-    %the user must exist already
-    [{TNewUser, NPropList}] = db_w:lookup(Users, TNewUser),
-    [{TOldUser, OPropList}] = db_w:lookup(Users, TOldUser),
+    %the users must exist already
+    NUser = #user{} = users:get(TNewUser),
+    OUser = #user{} = users:get(TOldUser),
+    TNewUser = NUser#user.username,
+    TOldUser = OUser#user.username,
 
     %% currency must be same
-    OldCurr = currency(OPropList),
-    ok = case currency(NPropList) of
+    OldCurr = OUser#user.currency,
+    ok = case NUser#user.currency of
              OldCurr -> ok;
              _ -> {error, currency_must_be_same}
          end,
@@ -518,14 +500,14 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
     % delete the debt
     db_w:delete(Debts, {P1, P2}),
 
-    TNewUser = verify_uid(TNewUser, Users),
+    TNewUser = verify_uid(TNewUser, []),
 
     DebtIds = approved_debts(TOldUser, ApprovalDebt),
 
     %% if there is just one debt
     case ResDebts of
         [{{P1, P2}, _}] ->
-            ok = db_w:delete(Users, TOldUser),
+            ok = users:delete(TOldUser),
             ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
         _ -> ok
     end,
@@ -739,11 +721,10 @@ uid_to_lower(Arg) ->
     lager:error("not valid String ~p", [Arg]).
 
 
-user_exist(Uid, State) ->
-    Users = ?USERS(State),
+user_exist(Uid, _State) ->
     UidLower  = ?UID_TO_LOWER(Uid),
-    case db_w:lookup(Users, UidLower) of
-        [] -> false;
+    case users:get(UidLower) of
+        no_such_user -> false;
         _  -> true
     end.
 
@@ -793,8 +774,8 @@ timestamp(Arg) ->
 server_timestamp(Arg) ->
     props(?SERVER_TIMESTAMP, Arg).
 
-user_type(Arg) ->
-    props(?USER_TYPE, Arg).
+%% user_type(Arg) ->
+%%     props(?USER_TYPE, Arg).
 
 username(Arg) ->
     props(?USER, Arg).
