@@ -3,7 +3,7 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1]).
+-export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1, count_by_usertype/1]).
 
 -record(user_mapping,
         { uid :: binary(), %% id from google or facebook or internal if local
@@ -79,9 +79,15 @@ get({username,Username}) ->
 get({uid, UserId}) ->
     from_mapping(
       mnesia:dirty_read(user_mapping, UserId));
+get({internal_uid, UserId}) ->
+    from_mapping(
+      mnesia:dirty_index_read(user_mapping, UserId, #user_mapping.internal_uid));
 get(Id) ->
     from_mapping(mnesia:dirty_read(user_mapping, Id) ++
             mnesia:dirty_index_read(user_mapping, Id, #user_mapping.username)).
+
+count_by_usertype(UserType) ->
+    length(mnesia:dirty_index_read(user_mapping, UserType, #user_mapping.user_type)).
 
 from_mapping([UserMapping,UserMapping]) ->
     from_mapping([UserMapping]);
@@ -100,18 +106,21 @@ from_mapping([]) ->
     no_such_user.
 
 create_mappingtable() ->
-    mnesia:create_table( user_mapping,
+    Res = mnesia:create_table( user_mapping,
                          [ {type, set},
                            {disc_copies, [node()]},
-                           {index, [username]},
-                           {attributes, record_info(fields,user_mapping)}]).
+                           {index, [username, user_type, internal_uid]},
+                           {attributes, record_info(fields,user_mapping)}]),
+    lager:info("Trying to create mapping table with result ~p", [Res]).
 
 create_usertable() ->
-    mnesia:create_table( user_info,
+    Res = mnesia:create_table( user_info,
                         [ {type, set},
                           {disc_copies, [node()]},
                           {index, []},
-                          {attributes, record_info(fields,user_info)}]).
+                          {attributes, record_info(fields,user_info)}]),
+    lager:info("Trying to create user table with result ~p", [Res]).
+
 %% to keep up to old API
 update_parts([], User) ->
     User;

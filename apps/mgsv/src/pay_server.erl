@@ -40,13 +40,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
 
+%-export([update_debts/1]).
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {_,A} = db_w:open_file("../../debts_0.3.2.dets",[{type, set}]),
-    {_,C} = db_w:open_file("../../debt_transactions_0.3.2.dets",[{type, set}]),
-    {_,D} = db_w:open_file("../../debt_approval_transactions_0.2c.dets",[{type, set}]),
+    {_,A} = db_w:open_file("../../debts_0.3.6.dets",[{type, set}]),
+    {_,C} = db_w:open_file("../../debt_transactions_0.3.6.dets",[{type, set}]),
+    {_,D} = db_w:open_file("../../debt_approval_transactions_0.3.6.dets",[{type, set}]),
     {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
     {ok, [ {?DEBTS,A}
          , {?DEBT_TRANSACTIONS, C}
@@ -114,23 +116,13 @@ d_local_users() ->
 %% callbacks
 %%debug
 handle_call(d_gmail_users, _From, State) ->
-    Users = ?USERS(State),
-    {reply, users(?GMAIL_USER, Users), State};
+    {reply, users(?GMAIL_USER), State};
 
 handle_call(d_facebook_users, _From, State) ->
-    Users = ?USERS(State),
-    {reply, users(?FACEBOOK_USER, Users), State};
+    {reply, users(?FACEBOOK_USER), State};
 
 handle_call(d_local_users, _From, State) ->
-    Users = ?USERS(State),
-    {reply, users(?LOCAL_USER, Users), State};
-
-%% ordinary
-handle_call(get_users, _From, State) ->
-    Users = ?USERS(State),
-    UserList = db_w:foldl(fun({_Uuid, PropList}, Acc) ->
-                                  [PropList | Acc] end, [], Users),
-    {reply, UserList, State};
+    {reply, users(?LOCAL_USER), State};
 
 handle_call({get_feedback}, _From, State) ->
     Feedback = ?FEEDBACK(State),
@@ -164,11 +156,21 @@ handle_call({change_userinfo, Uid, UserInfo}, _From, State) ->
             {reply, [], State}
         end;
 
-handle_call({get_user_debt, User},  _From, State) ->
-    {reply, get_tot_debts(?DEBTS(State), User), State};
+handle_call({get_user_debt, U},  _From, State) ->
+    User = users:get(U),
+    Debts = get_tot_debts(?DEBTS(State), User#user.internal_uid),
+    %% for now we translate...
+    UDebts = lists:map(fun({{Uid1,Uid2},P}) ->
+                               U1 = users:get({internal_uid,Uid1}),
+                               U2 = users:get({internal_uid,Uid2}),
+                               UP = replace_prop(?UID1, P, U1#user.username),
+                               UP2 = replace_prop(?UID2, UP, U2#user.username),
+                               {{U1#user.username,U2#user.username}, UP2} end, Debts),
+    {reply, UDebts, State};
 
 handle_call({get_user_transactions, TUser},  _From, State) ->
-    User = ?UID_TO_LOWER(TUser),
+    U = ?UID_TO_LOWER(TUser),
+    User = (users:get(U))#user.internal_uid,
     DebtTransactions = ?DEBT_TRANSACTIONS(State),
     ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     DebtIds = approved_debts(User, ApprovalDebt),
@@ -554,18 +556,146 @@ terminate(Reason, State) ->
 
 code_change(OldVsn, State, "0.3.6") ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.6"]),
-    mnesia:start(),
     mnesia:stop(),
     mnesia:create_schema([node()]),
     mnesia:start(),
+    lager:info("MNesia started, trying to create dbs",[]),
+    users:create_mappingtable(),
+    users:create_usertable(),
+    lager:info("Trying to reconstruct users",[]),
     users:reconstruct(?USERS(State)),
+
+    Users = ?USERS(State),
+    db_w:close(Users),
+
+    Debts = ?DEBTS(State),
+    {_,A} = db_w:open_file("../../debts_0.3.6.dets",[{type, set}]),
+    lager:info("trying to reconstruct debts"),
+    update_debts(Debts, A),
+    UState = [{?DEBTS,A}] ++ proplists:delete(?DEBTS, State),
+    db_w:close(Debts),
+
+    {_,C} = db_w:open_file("../../debt_transactions_0.3.6.dets",[{type, set}]),
+    lager:info("trying to reconstruct transactions"),
+    TransactionsDb = ?DEBT_TRANSACTIONS(State),
+    update_transactions(TransactionsDb, C),
+    UState2 = [{?DEBT_TRANSACTIONS, C}] ++ proplists:delete(?DEBT_TRANSACTIONS, UState),
+    db_w:close(TransactionsDb),
+
+    {_,D} = db_w:open_file("../../debt_approval_transactions_0.3.6.dets",[{type, set}]),
+    AT = ?DEBT_APPROVAL_TRANSACTIONS(State),
+    update_at(AT, D),
+    UState3 = [{?DEBT_APPROVAL_TRANSACTIONS, D}] ++
+        proplists:delete(?DEBT_APPROVAL_TRANSACTIONS, UState2),
+    db_w:close(AT),
+
+
     application:set_env(webmachine, server_name, "PayApp/0.3.6"),
-    {ok, State};
+    {ok, proplists:delete(?USERS, UState3)};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     application:set_env(webmachine, server_name, "PayApp/" ++ Extra),
     {ok, State}.
+
+%% {{<<"669a5eea-ab6c-4e76-b282-992a6dbbb794">>,<<"mattias.thell@gmail.com">>},
+%%  [{<<"amount">>,-1.0},
+%%   {<<"currency">>,<<"SEK">>},
+%%   {<<"uid1">>,<<"669a5eea-ab6c-4e76-b282-992a6dbbb794">>},
+%%   {<<"uid2">>,<<"mattias.thell@gmail.com">>}]
+update_debts(DebtsDB, UDebtsDB) ->
+    dets:traverse(DebtsDB,
+                  fun({{TUid1,TUid2},Props}) ->
+                          U1 = users:get(TUid1),
+                          U2 = users:get(TUid2),
+                          case {U1,U2} of
+                              {no_such_user, _Any} ->
+                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
+                              {_Any, no_such_user} ->
+                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
+                              _ ->
+                          Uid1 = element(2,U1),
+                          Uid2 = element(2,U2),
+                          Currency = proplists:get_value(?CURRENCY, Props),
+                          Amount = proplists:get_value(?AMOUNT, Props),
+                          NV =
+                              case Uid1 < Uid2 of
+                                  true ->
+                                      {{Uid1,Uid2}, [?AMOUNT(Amount),
+                                                     ?CURRENCY(Currency),
+                                                     ?UID1(Uid1),
+                                                     ?UID2(Uid2)
+                                                    ]};
+                                  false ->
+                                      UUid1 = Uid2,
+                                      UUid2 = Uid1,
+                                      {{UUid1,UUid2}, [?AMOUNT(-1 * Amount),
+                                                       ?CURRENCY(Currency),
+                                                       ?UID1(UUid1),
+                                                       ?UID2(UUid2)
+                                                      ]}
+                              end,
+
+                          db_w:insert(UDebtsDB,NV)
+                          end,
+                          continue end).
+
+%% {<<"be42cd40-d2f4-46ff-a0d4-2394baf96081">>,
+%%  [{<<"uid1">>,<<"321a83b3-050d-4761-9923-5fed8af4b787">>},
+%%   {<<"uid2">>,<<"mlokubo@gmail.com">>},
+%%   {<<"amount">>,60},
+%%   {<<"reason">>,<<"Borrowed Funds">>},
+%%   {<<"timestamp">>,1387549189324059},
+%%   {<<"currency">>,<<"USD">>},
+%%   {<<"uuid">>,<<"be42cd40-d2f4-46ff-a0d4-2394baf96081">>},
+%%   {<<"server_timestamp">>,1387549189324076},
+%%   {<<"org_debt">>,[{<<"currency">>,<<"USD">>},{<<"amount">>,60}]}
+update_transactions(TransactionsDB, UTransactionsDB) ->
+    dets:traverse(TransactionsDB,
+                  fun({DebtId, PropList}) ->
+                          TUid1 = proplists:get_value(?UID1, PropList),
+                          TUid2 = proplists:get_value(?UID2, PropList),
+                          User1 = users:get(TUid1),
+                          User2 = users:get(TUid2),
+                          case {User1,User2} of
+                              {no_such_user, _Any} ->
+                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [User1,User2, TUid1, TUid2]);
+                              {_Any, no_such_user} ->
+                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [User1,User2, TUid1, TUid2]);
+                              _ ->
+                          Uid1 = element(2,User1),
+                          Uid2 = element(2,User2),
+                          UP = proplists:delete(?UID1, PropList),
+                          UP1 = proplists:delete(?UID2, UP),
+                          ResP = [?UID1(Uid1),?UID2(Uid2)] ++ UP1,
+                          db_w:insert(UTransactionsDB, {DebtId,ResP})
+                          end,
+                          continue
+                  end).
+
+%% {<<"khaledelkalla@gmail.com">>,
+%%  [{approved_debts,[<<"e21fa552-4760-47ec-8cbb-f596f74b32bc">>,
+%%                    <<"4670d49c-7360-44f9-9ae7-00a31a98182d">>,
+%%                    <<"20172d28-5212-43a4-933f-7977da9f4449">>,
+%%                    <<"e911d3d0-5b45-4980-9006-1f6c0ffb65a0">>,
+%%                    <<"bfa0f56d-3b42-4f2e-8ba1-8ec210cf2065">>,
+%%                    <<"e9db644f-27f5-449a-9f65-3d3d275cf25e">>]}
+update_at(AT, D) ->
+    dets:traverse(AT,
+                  fun({Uid, List}) ->
+                          User = users:get(Uid),
+                          case User of
+                              no_such_user ->
+                                  lager:info("Missing user ~p With list ~p~n",
+                                             [Uid,List]);
+                              _ ->
+                                  UUid = element(2,User),
+                                  db_w:insert(D,{UUid, List})
+                          end,
+                          continue
+                  end).
+
+
 
 sort_user_debt(P1, P2, Amount) ->
     case P1 < P2 of
@@ -788,9 +918,5 @@ props(Name, Arg) ->
     {Name, Arg}.
 
 
-users(Type, Users) ->
-    db_w:foldl(fun({_Uuid, PropList} = User, Acc) ->
-                       case proplists:get_value(?USER_TYPE, PropList) of
-                           Type -> [User | Acc];
-                           _ -> Acc
-                       end end, [], Users).
+users(Type) ->
+    users:count_by_usertype(Type).
