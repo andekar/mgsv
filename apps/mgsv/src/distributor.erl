@@ -8,6 +8,7 @@
 -include_lib("webmachine/include/webmachine.hrl").
 
 -include("payapp.hrl").
+-include("common.hrl").
 
 init(_Config) ->
     {ok, []}.
@@ -102,19 +103,20 @@ process_post(ReqData, Context) ->
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}]  = proplists:lookup_all(json, Context),
-    [{userdata, Auth}] = proplists:lookup_all(userdata, Context),
+    [{userdata, UD}] = proplists:lookup_all(userdata, Context),
     Reply =
-        case {replace_request_by(Decoded, Auth, Scheme), Scheme} of
-            {{ok, Props}, https} -> error_logger:info_msg("~p ~p ~p ~p ~p", [Method, Url, Any, Props, Scheme]),
-                                    try
-                                        {ok, Result} = mgsv_server:send_message({Method, proplists:get_value(?REQUEST_BY, Props),
-                                                                                 Url, Props, Scheme}),
-                                        Result
-                                    catch
-                                        _:Error ->
-                                            lager:alert("CRASH ~p", [Error]),
-                                            mochijson2:encode([[{error,request_failed}]])
-                                    end;
+        case Scheme of
+            https ->
+                error_logger:info_msg("~p ~p ~p ~p ~p", [Method, Url, Any, UD, Scheme]),
+                try
+                    {ok, Result} = mgsv_server:send_message({Method, UD,
+                                                             Url, Decoded, Scheme}),
+                    Result
+                catch
+                    _:Error ->
+                        lager:alert("CRASH ~p~n", [Error, erlang:get_stacktrace()]),
+                        mochijson2:encode([[{error,request_failed}]])
+                end;
             _ -> mochijson2:encode([[{error, user_not_authenticated}]])
         end,
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
@@ -127,12 +129,13 @@ delete_resource(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
 
     lager:info("~p ~p", [Method, Url]),
-    {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
-    case catch mgsv_server:send_message({Method, list_to_binary(UserId),
+%    {_UserType, _UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
+    [{userdata, UD}] = proplists:lookup_all(userdata, Context),
+    case catch mgsv_server:send_message({Method, UD,
                                          Url, Scheme}) of
         ok -> {true, ReqData, Context};
         {'EXIT', Error} ->
-            lager:alert("CRASH ~p", [Error]),
+            lager:alert("CRASH ~p~n~p", [Error, erlang:get_stacktrace()]),
             {false, ReqData, Context};
         _  -> {false, ReqData, Context}
     end.
@@ -146,22 +149,22 @@ from_json(ReqData, Context) ->
     Method = ReqData#wm_reqdata.method,
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}] = proplists:lookup_all(json, Context),
-    [{userdata, Auth}] = proplists:lookup_all(userdata, Context),
+    [{userdata, Ud}] = proplists:lookup_all(userdata, Context),
     Reply =
-        case {replace_request_by(Decoded, Auth, Scheme), Scheme} of
-            {{ok, _Props}, http} ->
+        case Scheme of
+            http ->
                 "operation not allowed";
 
-            {{ok, Props}, https} -> error_logger:info_msg("~p ~p ~p", [Method, Url, Props]),
-                                    try
-                                        {ok, Result} = mgsv_server:send_message({Method, proplists:get_value(?REQUEST_BY, Props),
-                                                                                 Url, Props, Scheme}),
-                                        Result
-                                    catch
-                                        _:Error ->
-                                            lager:alert("CRASH ~p", [Error]),
-                                            mochijson2:encode([[{error,request_failed}]])
-                                    end;
+            https -> error_logger:info_msg("~p ~p ~p", [Method, Url, Decoded]), %
+                     try
+                         {ok, Result} = mgsv_server:send_message({Method, Ud,
+                                                                  Url, Decoded, Scheme}),
+                         Result
+                     catch
+                         _:Error ->
+                             lager:alert("CRASH ~p~n~p", [Error, erlang:get_stacktrace()]),
+                             mochijson2:encode([[{error,request_failed}]])
+                     end;
             _ -> mochijson2:encode([[{error, user_not_authenticated}]])
         end,
     error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
@@ -179,17 +182,24 @@ to_html(ReqData, Context) ->
                 {Result, ReqData, Context};
             {Any, https} ->
                 error_logger:info_msg("~p ~p",[Method, Any]),
-                {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
-                {ok, Result} = try mgsv_server:send_message({Method, list_to_binary(UserId),
+%                {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
+                [{userdata, UD}] = proplists:lookup_all(userdata, Context),
+                {ok, Result} = try mgsv_server:send_message({Method, UD,
                                                              Any, Scheme})
                                catch
                                    _:Err ->
-                                       lager:alert("CRASH ~p", [Err]),
+                                       lager:alert("CRASH ~p~n~p", [Err, erlang:get_stacktrace()]),
                                        {ok, mochijson2:encode([[{error,request_failed}]])}
                                end,
                 {Result, ReqData, Context}
         end,
-    error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)]),
+    case wrq:path_tokens(ReqData) of
+        ["countries"] ->
+            error_logger:info_msg("REPLY {\"NZD\":\"New Zealand Dollar....");
+        ["rates"] ->
+            error_logger:info_msg("REPLY {\"UGX\ ...");
+        _ -> error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)])
+    end,
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
     {HBody, ReqData, Ctx2}.
@@ -198,17 +208,39 @@ is_authorized(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
     case Scheme of
         https ->
+            %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
+            UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
+            {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
+                                                   {true,Vars};
+                                              (V,{true,{O,_}}) ->
+                                                   {false,{O,V}};
+                                              ("Darwin", {B,{_,V}})->
+                                                   {B,{ios,V}};
+                                              (_, {false,Vars}) ->
+                                                   {false,Vars}
+                                           end,
+                                           {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
+            UD = #user_data{os = Os,
+                            version = Version
+                           },
+            lager:info("Got user-agent OS ~p Version ~p~n~p~n~n",[Os,Version, UserAgent]),
             case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
-                {"debug", _UserId, _Token} = UserData ->
-                    {true, ReqData, [{userdata, UserData}|Context]};
-                {UserType, UserId, Token} = UserData ->
+                {"debug", UserId, _Token} ->
                     BinUserId = list_to_binary(UserId),
+                    UDU = UD#user_data{ username = BinUserId,
+                                        user_type = <<"debug">>},
+                    {true, ReqData, [{userdata, UDU}|Context]};
+                {UserType, UserId, Token} ->
+                    BinUserId = list_to_binary(UserId),
+                    UDU = UD#user_data{ username = BinUserId,
+                                        user_type = list_to_binary(UserType)},
                     lager:info("Request from ~p",[UserId]),
                     case validate_user:validate(list_to_binary(Token), BinUserId, list_to_binary(UserType)) of
-                        <<"andersk84@gmail.com">> ->
-                            {true, ReqData, [{userdata, UserData}|Context]};
-                        BinUserId ->
-                            {true, ReqData, [{userdata, UserData}|Context]};
+                        {BinUserId, Id} ->
+                            {true, ReqData, [{userdata, UDU#user_data{id = Id}}|Context]};
+                        {BinUserName, BinUserId} ->
+                            {true, ReqData, [{userdata, UDU#user_data{id = BinUserId,
+                                                                     username = BinUserName}}|Context]};
                         Res ->
                             lager:alert("Access denied authorization field, usertype ~p userid ~p  res ~p", [UserType, UserId, Res]),
                             {"Basic realm=webmachine", ReqData, Context}
@@ -229,14 +261,6 @@ destructify({Key, PossibleList}) ->
 destructify(Other) ->
     Other.
 
-replace_request_by(Props, _Any, http) ->
-    {ok, Props};
-replace_request_by(Props, {_UserType, UserId, _Token}, https) ->
-    {ok, replace_prop(?REQUEST_BY, Props, list_to_binary(UserId))};
-replace_request_by(_,_,_) ->
-    {error,failed}.
-
-
 user_from_auth("Basic" ++ Base64) ->
     Str = base64:mime_decode_to_string(Base64),
     case string:tokens(Str, ":") of
@@ -249,14 +273,11 @@ user_from_auth("Basic" ++ Base64) ->
 user_from_auth(_) ->
     {error, wrong_format}.
 
-replace_prop(Key, List, Value) ->
-    [{Key, Value} | proplists:delete(Key, List)].
-
-
 request_data(Data) ->
     try lists:flatten(destructify(mochijson2:decode(Data)))
     catch
         _:Errors ->
-            lager:alert("CRASH when decoding json ~p", [Errors]),
+            lager:alert("CRASH when decoding json ~p~n~p", [Errors, erlang:get_stacktrace()
+]),
             []
     end.

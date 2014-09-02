@@ -9,23 +9,17 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, call_pay/1, cast_pay/1]).
+-export([start_link/0]).
 
--export([ sort_user_debt/8
-         , sort_user_debt/3
-         , get_and_check_props/2
-         , add_to_earlier_debt/2
-         , add_to_earlier_debt/4
-         , get_user_transactions/1
+-export([ get_user_transactions/1
          , delete_debt/1
-         , register_user/1
+         , register_user/2
          , get_user_debt/1
          , change_user/2
          , add_debt/1
          , transfer_debts/3
-         , user_exist/1
          , user_exist/2
-         , get_usernames/1
+         , get_usernames/2
          , change_userinfo/2
          , remove_user_debt/2
          , add_feedback/2
@@ -40,32 +34,17 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
 
-%-export([update_debts/1]).
+-export([currency_and_amount/3]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {_,A} = db_w:open_file("../../debts_0.3.6.dets",[{type, set}]),
-    {_,C} = db_w:open_file("../../debt_transactions_0.3.6.dets",[{type, set}]),
-    {_,D} = db_w:open_file("../../debt_approval_transactions_0.3.6.dets",[{type, set}]),
     {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
-    {ok, [ {?DEBTS,A}
-         , {?DEBT_TRANSACTIONS, C}
-         , {?DEBT_APPROVAL_TRANSACTIONS, D}
-         , {?FEEDBACK, E}]}.
+    {ok, [{?FEEDBACK, E}]}.
 
-call_pay(Message) ->
-    gen_server:call(?MODULE, Message).
-
-cast_pay(Message) ->
-    gen_server:cast(?MODULE, Message).
-
-register_user(UserInfo) ->
-    gen_server:call(?MODULE, {register, UserInfo}).
-
-user_exist(Uid) ->
-    gen_server:call(?MODULE, {user_exist, Uid}).
+register_user(UserInfo, Userdata) ->
+    gen_server:call(?MODULE, {register, UserInfo, Userdata}).
 
 add_debt(Message) ->
     gen_server:call(?MODULE, Message).
@@ -73,17 +52,17 @@ add_debt(Message) ->
 delete_debt(Message) ->
     gen_server:call(?MODULE, Message).
 
-get_user_debt(User) ->
-    gen_server:call(?MODULE, {get_user_debt, User}).
+get_user_debt(Userdata) ->
+    gen_server:call(?MODULE, {get_user_debt, Userdata}).
 
-change_userinfo(Uid, UserInfo) ->
-    gen_server:call(?MODULE, {change_userinfo, Uid, UserInfo}).
+change_userinfo(Ud, UserInfo) ->
+    gen_server:call(?MODULE, {change_userinfo, Ud, UserInfo}).
 
-get_user_transactions(User) ->
-    gen_server:call(?MODULE, {get_user_transactions, User}).
+get_user_transactions(Userdata) ->
+    gen_server:call(?MODULE, {get_user_transactions, Userdata}).
 
-get_usernames(Uids) ->
-    gen_server:call(?MODULE, {get_usernames, Uids}).
+get_usernames(Uids, Userdata) ->
+    gen_server:call(?MODULE, {get_usernames, Uids, Userdata}).
 
 change_user(OldUser, NewUser) ->
     gen_server:cast(?MODULE, {change_username, OldUser, NewUser}).
@@ -91,8 +70,8 @@ change_user(OldUser, NewUser) ->
 transfer_debts(OldUser, NewUser, ReqBy) ->
     gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
 
-remove_user_debt(Uuid, ReqBy) ->
-    gen_server:cast(?MODULE,{remove_user_debt, Uuid, ReqBy}).
+remove_user_debt(Uuid, Userdata) ->
+    gen_server:cast(?MODULE,{remove_user_debt, Uuid, Userdata}).
 
 add_feedback(ReqBy, Feedback) ->
     gen_server:call(?MODULE, {add_feedback, ReqBy, Feedback}).
@@ -143,49 +122,37 @@ handle_call({add_feedback, ReqBy, Feedback}, _From, State) ->
     {reply, {ok, FB}, State};
 
 %%TODO fix transaction
-handle_call({change_userinfo, Uid, UserInfo}, _From, State) ->
-    case users:get(Uid) of
+handle_call({change_userinfo, Ud, UserInfo}, _From, State) ->
+    case Ud#user_data.user of
         User = #user{} ->
             UUser = users:update_parts(UserInfo, User),
-            io:format("UserInfo ~p~n", [UserInfo] ),
-            users:update(UUser, UUser#user.internal_uid),
+            users:update(UUser, UUser),
             {reply, [users:to_proplist(UUser)], State};
         Other ->
-            lager:error("Tried changing username got ~p from db Uid ~p Un ~p"
-                       , [Other, Uid, UserInfo]),
+            lager:error("Tried changing username got ~p from db Ud ~p Un ~p"
+                       , [Other, Ud, UserInfo]),
             {reply, [], State}
         end;
 
 handle_call({get_user_debt, U},  _From, State) ->
-    User = users:get(U),
-    Debts = get_tot_debts(?DEBTS(State), User#user.internal_uid),
-    %% for now we translate...
-    UDebts = lists:map(fun({{Uid1,Uid2},P}) ->
-                               U1 = users:get({internal_uid,Uid1}),
-                               U2 = users:get({internal_uid,Uid2}),
-                               UP = replace_prop(?UID1, P, U1#user.username),
-                               UP2 = replace_prop(?UID2, UP, U2#user.username),
-                               {{U1#user.username,U2#user.username}, UP2} end, Debts),
+    User = U#user_data.user,
+    Debts = debt:get(User),
+    UDebts = lists:map(fun(V) ->
+                               debt:to_proplist(V) end,
+                               Debts),
     {reply, UDebts, State};
 
-handle_call({get_user_transactions, TUser},  _From, State) ->
-    U = ?UID_TO_LOWER(TUser),
-    User = (users:get(U))#user.internal_uid,
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-    DebtIds = approved_debts(User, ApprovalDebt),
+handle_call({get_user_transactions, Ud},  _From, State) ->
+    User = Ud#user_data.user,
+    Transactions = transaction:get(User),
     DebtLists =
-        lists:map(fun(Id) ->
-                  [{Id, List}] = db_w:lookup(DebtTransactions, Id),
-                  List
-             end, DebtIds),
+        lists:map(fun(Transaction) ->
+                          transaction:to_proplist(Transaction)
+             end, Transactions),
     {reply, DebtLists, State};
 
-handle_call({user_exists, Uid}, _From, State) ->
-    {reply, user_exist(Uid, State), State};
-
 %%TODO fix transactions
-handle_call({get_usernames, Uids}, _From, State) ->
+handle_call({get_usernames, Uids, _Userdata}, _From, State) ->
     RecUsers = lists:filter(fun({?UID, _}) -> true;
                                (_) -> false end, Uids),
     RetUsers = lists:map(fun({?UID, TUid}) ->
@@ -198,129 +165,60 @@ handle_call({get_usernames, Uids}, _From, State) ->
               end, RecUsers),
     {reply, RetUsers, State};
 
-handle_call({add, TReqBy, Struct}, _From, State) ->
-    Debts = ?DEBTS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-
-    Uuid = binary_uuid(),
-    Reason = proplists:get_value(?REASON, Struct),
-    Amount = proplists:get_value(?AMOUNT, Struct),
-    Currency = proplists:get_value(?CURRENCY, Struct, ?SWEDISH_CRONA), %% Default to SEK for now
-    TimeStamp = proplists:get_value(?TIMESTAMP, Struct, get_timestamp()),
-    ServerTimeStamp = server_timestamp(get_timestamp()),
+handle_call({add, Ud, Struct}, _From, State) ->
     EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
-    ReqBy = ?UID_TO_LOWER(TReqBy),
+    ReqBy = Ud#user_data.user,
+    Transaction = transaction:from_proplist(Struct),
 
-    %% per user
-     [User1, User2]
-        = lists:map(fun({P, U}) -> %% TODO add validation of verify_uid
-                    Uid  = verify_uid(uid_to_lower(proplists:get_value(U, Struct)), []),
-                    UserType = proplists:get_value(?USER_TYPE, Struct, ?LOCAL_USER),
-                    User = #user{} = case users:get(Uid) of
-                                      %% make sure that we never autogenerate username
-                                 no_such_user ->
-                                       [{P, DisplayName}] = proplists:lookup_all(P, Struct),
-                                       users:add(Uid,Uid,DisplayName,UserType,Currency);
-                                 Val  -> Val
-                             end,
-                    User end,
-                    [{?USER1, ?UID1}, {?USER2, ?UID2}]),
-    Uid1 = User1#user.username,
-    Uid2 = User2#user.username,
-    SortedUDebt = sort_user_debt(Uid1, Uid2, Amount),
-    SortMult = Amount/amount(SortedUDebt),
-    OrgDebt = case {amount(SortedUDebt) == Amount, proplists:lookup_all(?ORG_DEBT, Struct)} of
-                  {_, []} -> [{?ORG_DEBT, [{?AMOUNT, amount(SortedUDebt)}, {?CURRENCY, Currency}]}];
-                  {false, [{?ORG_DEBT, OrgD}]} -> [{?ORG_DEBT,  replace_prop(?AMOUNT, OrgD, -1* amount(OrgD))}];
-                  {true, ODs} -> ODs
-              end,
-    {Curr, Am} = currency_and_amount({uid1(SortedUDebt), uid2(SortedUDebt)}
-                                     , SortedUDebt ++ [ {?CURRENCY, Currency}]
-                                     ++ OrgDebt, Debts),
-    lager:info("got curr ~p Am ~p", [Curr, Am]),
-    SortedDebt =
-        sort_user_debt(uid1(SortedUDebt), uid2(SortedUDebt), Am)
-        ++ get_and_check_props([?REASON], Struct) ++ [ timestamp(TimeStamp)
-                                                    , {?CURRENCY, Curr}
-                                                    , {?UUID, Uuid}
-                                                    , ServerTimeStamp]
-                                      ++ OrgDebt,
-    %Check uid1 != uid2
-    AddToSelf = case Uid1 of
-                    Uid2 -> can_not_add_debt_to_self;
-                    _ -> ok
-                end,
+    User1 = users:get({internal_uid, Transaction#transaction.paid_by}),
+    User2 = users:get({internal_uid, Transaction#transaction.paid_for}),
+    Username1 = User1#user.username,
+    Username2 = User2#user.username,
+
     AddLocal = case { User1#user.user_type
-                      , User2#user.user_type} of
-                     %don't add debts between two localusers
-                   {{?USER_TYPE, ?LOCAL_USER}, {?USER_TYPE, ?LOCAL_USER}} -> do_not_add_between_two_local_users;
+                    , User2#user.user_type} of
+                    %don't add debts between two localusers
+                   {?LOCAL_USER, ?LOCAL_USER} ->
+                       do_not_add_between_two_local_users;
                    _       -> ok
                end,
-    Status = case {AddToSelf, AddLocal} of
-                 {ok, ok} ->
-                     add_transaction(SortedDebt, ApprovalDebt, Debts),
-                     lager:info("Inserting Debt: ~p", [SortedDebt]),
-                     db_w:insert(DebtTransactions, {Uuid, SortedDebt}),
-                     case ReqBy of
-                         Uid1 -> pay_push_notification:notify_user(Uid2, Reason);
-                         Uid2 -> pay_push_notification:notify_user(Uid1, Reason);
-                         _ -> pay_push_notification:notify_user(Uid1, Reason),
-                              pay_push_notification:notify_user(Uid2, Reason)
+    Status = case {AddLocal} of
+                 {ok} ->
+                     ok = debt:add(Transaction, ReqBy),
+                     transaction:add(Transaction, ReqBy),
+                     lager:info("Inserting transaction: ~p", [Transaction]),
+                     Reason = Transaction#transaction.reason,
+                     case ReqBy of %% TODO change this?
+                         User1 -> pay_push_notification:notify_user(Username2, Reason);
+                         User2 -> pay_push_notification:notify_user(Username1, Reason);
+                         _ -> pay_push_notification:notify_user(Username1, Reason),
+                              pay_push_notification:notify_user(Username2, Reason)
                      end,
                      <<"ok">>;
                  _ -> <<"failed">>
              end,
-    OD = proplists:get_value(?ORG_DEBT, OrgDebt),
-    %% this should be changed to [{paid_by:[{user}]}, {paid_for:[user,user]}]
-    {reply, [ % first user stuff
-              ?UID1(Uid1)
-            , ?USER1(User1#user.displayname)
-            , ?USER_TYPE1(User1#user.user_type)
-
-              % second user stuff
-            , ?UID2(Uid2)
-            , ?USER2(User2#user.displayname)
-            , ?USER_TYPE2(User1#user.user_type)
-
-            %% DEBT stuff
-            , ?UUID(Uuid)
-            , ?REASON(Reason)
-            , ?AMOUNT(SortMult * amount(SortedDebt))     %% saved for backwardscompability
-            , ?CURRENCY(Currency) %% saved for backwardscompability
-            , timestamp(TimeStamp)
-            , ServerTimeStamp
-            , ?STATUS(Status)
-            ] ++ EchoUuid
-              ++ [{?ORG_DEBT,
-                   replace_prop(?AMOUNT, OD, amount(OD) * SortMult)}]
+    {reply, transaction:to_proplist(Transaction)  ++
+         EchoUuid ++
+         [?STATUS(Status)]
        , State};
 
 %% should we send a notification to the other part?
-handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    Debts = ?DEBTS(State),
-    case db_w:lookup(DebtTransactions, Uuid) of
-        [{Uuid, Items}] ->
+handle_call({delete_debt, Userdata, Uuid}, _From, State) ->
+    Transaction = transaction:get({transaction_id, Uuid}),
+    ReqByU = Userdata#user_data.user,
+    ReqBy = ReqByU#user.username,
+    case Transaction of
+        [#transaction{} = T] ->
             %crash if reqby is not one of the uids in the debt
-            ok = case {uid1(Items), uid2(Items)} of
+
+            ok = case {T#transaction.paid_by_username,
+                       T#transaction.paid_for_username} of
                      {ReqBy, _} -> ok;
                      {_ , ReqBy} -> ok;
                      _ -> {error, requestby_not_part_of_transaction}
                  end,
-            db_w:delete(DebtTransactions, Uuid),
-            Uid1 = proplists:get_value(?UID1, Items),
-            Uid2 = proplists:get_value(?UID2, Items),
-            Amount = proplists:get_value(?AMOUNT, Items), %% TODO fix this
-            remove_debt(Uid1, ApprovalDebt, Uuid),
-            remove_debt(Uid2, ApprovalDebt, Uuid),
-
-            add_to_earlier_debt( -1* amount(sort_user_debt(Uid1, Uid2, Amount))
-                                 , {Uid1, Uid2}
-                                 , currency(Items)
-                                 , Debts
-                               ),
+            transaction:delete(T),
+            debt:delete(T, ReqByU),
             lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]);
         %% below shows something corrupt action should be taken
         [{_Uuid, _Items} | _More] = List -> lager:info("ERROR delete_debt ~p", [List]);
@@ -328,9 +226,13 @@ handle_call({delete_debt, ReqBy, Uuid}, _From, State) ->
     end,
     {reply, ok, State};
 
-handle_call({register, UserInfo}, _From, State) ->
+handle_call({register, UserInfo, Ud}, _From, State) ->
     EchoUuid = proplists:lookup_all(?ECHO_UUID, UserInfo),
     UidLower  = verify_uid(uid_to_lower(uid(UserInfo)), []),
+    RBy = case Ud#user_data.user of
+              no_such_user -> UidLower;
+              Us -> Us
+          end,
     RepUserType = case string:rstr(binary_to_list(UidLower), "@") of
                       0 -> ?LOCAL_USER;
                       _ -> ?GMAIL_USER
@@ -343,7 +245,7 @@ handle_call({register, UserInfo}, _From, State) ->
             RetUsr = case users:get(UidLower) of
                          %% make sure that we never autogenerate username
                          no_such_user ->
-                             User = users:add(UidLower,UidLower, UserName, UserType, Currency, UidLower),
+                             User = users:add(UidLower,UidLower, UserName, UserType, Currency, RBy),
                              lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
                                         [UidLower, username(UserName), UserType, Currency]),
                              User;
@@ -360,9 +262,6 @@ handle_call(Request, _From, State) ->
 
 %% notice how any one can change their username if we add this to calls
 handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
-    Debts = ?DEBTS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
@@ -370,164 +269,124 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
 
     no_such_user = users:get(TNewUser),
     User = #user{} = users:get(TOldUser),
-
+    OUserid = User#user.internal_uid,
     ok = users:delete(User),
     UUser = User#user{
               uid = TNewUser,
               username = TNewUser
              },
-    users:add(UUser, TNewUser), %% TODO when we have both uid and username
+    users:add(UUser, UUser), %% TODO when we have both uid and username
 
-    DebtIds = approved_debts(TOldUser, ApprovalDebt),
+    lists:foreach(fun(T) ->
+                          case T#transaction.paid_by_username of
+                              TOldUser ->
+                                  transaction:add(T#transaction{paid_by_username = TNewUser}, UUser);
+                              _ ->
+                                  transaction:add(T#transaction{paid_for_username = TNewUser}, UUser)
+                          end end, transaction:get(TOldUser)),
 
-    ok = db_w:delete(ApprovalDebt, TOldUser),
-    update_approved_debts(TNewUser, ApprovalDebt, DebtIds),
-
-    _DebtLists =
-        lists:map(fun(Id) ->
-                          [{Uuid, Items}] = db_w:lookup(DebtTransactions, Id),
-                          ok = db_w:delete(DebtTransactions, Id),
-                          SwappedItems = change_uid(TNewUser, TOldUser, Items),
-                          db_w:insert(DebtTransactions, {Uuid, SwappedItems})
-                  end, DebtIds),
-
-    OldDebts = get_tot_debts(Debts, TOldUser),
-    lists:foreach( fun({{P1, P2}, List}) ->
-                           dets:delete(Debts, {P1,P2}),
-                           case P1 of
-                               TOldUser ->
-                                   add_to_earlier_debt(sort_user_debt(undef, TNewUser, P2, undef, undef, amount(List), undef, currency(List)), Debts);
-                               _ -> add_to_earlier_debt(sort_user_debt(undef, P1, TNewUser, undef, undef, amount(List), undef, currency(List)), Debts)
-                           end
-                   end
-                 , OldDebts),
+    lists:foreach(fun(D) ->
+                          case D#debt.uid1 of
+                              OUserid ->
+                                  debt:add(D#debt{uid1_username = TNewUser}, UUser);
+                              _ ->
+                                  debt:add(D#debt{uid2_username = TNewUser}, UUser)
+                          end
+                  end, debt:get({uid,OUserid})),
 
     lager:info("Changed username from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
-handle_cast({remove_user_debt, TUuid, TReqBy}, State) ->
-    Debts = ?DEBTS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
-
+handle_cast({remove_user_debt, TUuid, Userdata}, State) ->
     OUser = users:get(?UID_TO_LOWER(TUuid)),
-    OldUserType = OUser#user.user_type,
-    ReqBy = ?UID_TO_LOWER(TReqBy),
-    ResDebts = get_tot_debts(Debts, OUser#user.username),
+    ReqUser = Userdata#user_data.user,
+    lager:info("Removed debts between ~p and ~p ~n", [OUser, ReqUser]),
 
-    Res = lists:filter(fun({{PP1, PP2}, _}) ->
-                               case {PP1, PP2} of
-                                   {ReqBy, _} -> true;
-                                   {_, ReqBy} -> true;
-                                   _ -> false
-                               end end, ResDebts),
-    case Res of
-        [{{P1, P2}, _V}] ->
-            % delete the debt
-            db_w:delete(Debts, {P1, P2}),
-
-            % all debts are approved
-            DebtIds = approved_debts(OUser#user.username, ApprovalDebt),
-
-            %% if there is just one debt and we have a local user here
-            case {ResDebts, OldUserType} of
-                {[{{P1, P2}, _}], ?LOCAL_USER} ->
-                    ok = users:delete(OUser),
-                    ok = db_w:delete(ApprovalDebt, OUser#user.username); %% should not cause any problems
-                _ -> ok
-            end,
-
-            _DebtLists = lists:map(
-                   fun(Id) ->
-                           [{Id, Items}] = db_w:lookup(DebtTransactions, Id),
-                           case {get_value(?UID1, Items), get_value(?UID2, Items)} of
-                               {P1, P2} ->         %delete the approved debt id
-                                   ok = remove_debt(OUser#user.username, ApprovalDebt, Id),
-                                   ok = remove_debt(ReqBy, ApprovalDebt, Id);
-                               _ -> ok
-                           end
-                   end, DebtIds),
-
-            lager:info("Removed debts from ~p ~n", [OUser]);
-        [{{_,_},_}| _More] = List -> lager:info("ERROR in remove_user_debt ~p", [List]);
-        _ -> ok
+    %% if there is just one debt
+    %% BUT DO THIS LAST
+    DeleteU =
+        case {debt:get(OUser), OUser#user.user_type} of
+            {[#debt{}], ?LOCAL_USER} ->
+                fun() -> users:delete(OUser) end;
+            {[], ?LOCAL_USER} ->
+                fun() -> users:delete(OUser) end;
+        _ -> fun() -> ok end
     end,
 
+    ok = case debt:get([OUser, ReqUser]) of
+             [] ->
+                 ok;
+             [Debt] ->
+                 lager:info("Removing debt ~p ~n", [Debt]),
+                 debt:delete(Debt),
+                 ok;
+             _ -> nok
+         end,
+    Transactions = transaction:get([OUser, ReqUser]),
+
+    lists:foreach(fun(T) ->
+                          transaction:delete(T) end,
+                 Transactions),
+    DeleteU(),
     {noreply, State};
 
 % The user transferring debts must be the creator (ReqBy)
-handle_cast({transfer_debts, TTOldUser, TTNewUser, ReqBy}, State) ->
-    Debts = ?DEBTS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    ApprovalDebt = ?DEBT_APPROVAL_TRANSACTIONS(State),
+handle_cast({transfer_debts, TTOldUser, TTNewUser, Ud}, State) ->
+    TOldUser = users:get({username,?UID_TO_LOWER(TTOldUser)}),
+    TNewUser = users:get({username, ?UID_TO_LOWER(TTNewUser)}),
+    ReqByU = Ud#user_data.user,
 
-    TOldUser = ?UID_TO_LOWER(TTOldUser),
-    TNewUser = ?UID_TO_LOWER(TTNewUser),
+    lager:info("TOldUser ~p Username ~p~nTNewUser ~p username ~p~nReqByU ~p username ~p", [TOldUser, ?UID_TO_LOWER(TTOldUser), TNewUser, ?UID_TO_LOWER(TTNewUser), ReqByU, ?UID_TO_LOWER(TTNewUser)]),
     %% Check that we do not transfer to the same user
-    ok = case TOldUser of
-             TNewUser -> trying_to_transfer_to_self_error;
+    ok = case TOldUser#user.username == TNewUser#user.username of
+             true -> trying_to_transfer_to_self_error;
              _ -> ok
          end,
-    ok = case ReqBy of
-             TNewUser -> tryng_to_add_to_self_error;
+    ok = case ReqByU#user.username == TNewUser#user.username of
+              true -> trying_to_add_to_self_error;
              _ -> ok
          end,
     % to make sure we transfer only uuid users we check that the id does not contain an @
-    0 = string:rstr(binary_to_list(TOldUser), "@"),
+    0 = string:rstr(binary_to_list(TOldUser#user.username), "@"),
 
-    % we should only get one old debt since these are supposed to be per user.
-    % but we allow there to be more
-    ResDebts = get_tot_debts(Debts, TOldUser),
-
-    [{{P1, P2}, _L}] = lists:filter(fun({{PP1, PP2}, _}) ->
-                                            case {PP1, PP2} of
-                                                {ReqBy, _} -> true;
-                                                {_, ReqBy} -> true;
-                                                _ -> false
-                                            end end, ResDebts),
-
-    %the users must exist already
-    NUser = #user{} = users:get(TNewUser),
-    OUser = #user{} = users:get(TOldUser),
-    TNewUser = NUser#user.username,
-    TOldUser = OUser#user.username,
+    [Debt] = debt:get([TOldUser,ReqByU]),
+    [NewDebt] = debt:get([TNewUser,ReqByU]),
 
     %% currency must be same
-    OldCurr = OUser#user.currency,
-    ok = case NUser#user.currency of
-             OldCurr -> ok;
-             _ -> {error, currency_must_be_same}
+    ok = case Debt#debt.currency == NewDebt#debt.currency of
+             true -> ok;
+             _ -> not_same_currency
          end,
 
-    % delete the debt
-    db_w:delete(Debts, {P1, P2}),
-
-    TNewUser = verify_uid(TNewUser, []),
-
-    DebtIds = approved_debts(TOldUser, ApprovalDebt),
-
     %% if there is just one debt
-    case ResDebts of
-        [{{P1, P2}, _}] ->
-            ok = users:delete(TOldUser),
-            ok = db_w:delete(ApprovalDebt, TOldUser); %% should not cause any problems
-        _ -> ok
-    end,
+    %% BUT DO THIS LAST
+    DeleteU =
+        case {debt:get(TOldUser), TOldUser#user.user_type} of
+            {[#debt{}], ?LOCAL_USER} ->
+                fun() -> users:delete(TOldUser) end;
+            {[], ?LOCAL_USER} ->
+                fun() -> users:delete(TOldUser) end;
+            _ -> fun() -> ok end
+        end,    % delete the debt
 
-    lists:map(
-      fun(Id) ->
-              [{Uuid, Items}] = db_w:lookup(DebtTransactions, Id),
-               case {get_value(?UID1, Items), get_value(?UID2, Items)} of
-                   {P1, P2} ->
-                       ok = db_w:delete(DebtTransactions, Id),
-                       SwappedItems = change_uid(TNewUser, TOldUser, Items),
-                       db_w:insert(DebtTransactions, {Uuid, SwappedItems}),
-                       add_to_earlier_debt(sort_user_debt(Uuid, uid1(SwappedItems), uid2(SwappedItems), undefined, undefined, amount(SwappedItems), undefined, currency(Items)), Debts),
-                       update_approved_debts(TNewUser, ApprovalDebt, [Uuid]);
-                   _ -> ok
-               end
-               end, DebtIds),
+    Ts = transaction:get(TOldUser),
+    OldUsername = TOldUser#user.username,
+    debt:delete(Debt),
+    lists:foreach(
+      fun(T) ->
+              UT = case T#transaction.paid_by_username of
+                       OldUsername ->
+                           T#transaction{paid_by_username = TNewUser#user.username,
+                                         paid_by = TNewUser#user.internal_uid};
+                       _ ->
+                           T#transaction{paid_for_username = TNewUser#user.username,
+                                         paid_for = TNewUser#user.internal_uid}
+              end,
+              transaction:add(UT, ReqByU),
+              debt:add(UT, ReqByU)
+      end, Ts),
 
+    DeleteU(),
     lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
     {noreply, State};
 
@@ -544,14 +403,8 @@ handle_info(Msg, State) ->
     lager:alert("Handle unknown info ~p", [Msg]),
     {noreply, State}.
 
-terminate(Reason, State) ->
-    lager:emergency("TERMINATING ~p", [Reason]),
-    Debts = ?DEBTS(State),
-    Users = ?USERS(State),
-    DebtTransactions = ?DEBT_TRANSACTIONS(State),
-    db_w:close(Debts),
-    db_w:close(Users),
-    db_w:close(DebtTransactions),
+terminate(Reason, _State) ->
+    lager:emergency("TERMINATING ~p~n~p", [Reason, erlang:get_stacktrace()]),
     ok.
 
 code_change(OldVsn, State, "0.3.6") ->
@@ -569,174 +422,25 @@ code_change(OldVsn, State, "0.3.6") ->
     db_w:close(Users),
 
     Debts = ?DEBTS(State),
-    {_,A} = db_w:open_file("../../debts_0.3.6.dets",[{type, set}]),
     lager:info("trying to reconstruct debts"),
-    update_debts(Debts, A),
-    UState = [{?DEBTS,A}] ++ proplists:delete(?DEBTS, State),
+    debt:create_debttable(),
+    debt:reconstruct(Debts),
     db_w:close(Debts),
 
-    {_,C} = db_w:open_file("../../debt_transactions_0.3.6.dets",[{type, set}]),
     lager:info("trying to reconstruct transactions"),
+    transaction:create_transactiontable(),
     TransactionsDb = ?DEBT_TRANSACTIONS(State),
-    update_transactions(TransactionsDb, C),
-    UState2 = [{?DEBT_TRANSACTIONS, C}] ++ proplists:delete(?DEBT_TRANSACTIONS, UState),
+    transaction:reconstruct(TransactionsDb),
     db_w:close(TransactionsDb),
 
-    {_,D} = db_w:open_file("../../debt_approval_transactions_0.3.6.dets",[{type, set}]),
-    AT = ?DEBT_APPROVAL_TRANSACTIONS(State),
-    update_at(AT, D),
-    UState3 = [{?DEBT_APPROVAL_TRANSACTIONS, D}] ++
-        proplists:delete(?DEBT_APPROVAL_TRANSACTIONS, UState2),
-    db_w:close(AT),
-
-
     application:set_env(webmachine, server_name, "PayApp/0.3.6"),
-    {ok, proplists:delete(?USERS, UState3)};
+    {ok, [{?FEEDBACK, ?FEEDBACK(State)}]};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     application:set_env(webmachine, server_name, "PayApp/" ++ Extra),
     {ok, State}.
 
-%% {{<<"669a5eea-ab6c-4e76-b282-992a6dbbb794">>,<<"mattias.thell@gmail.com">>},
-%%  [{<<"amount">>,-1.0},
-%%   {<<"currency">>,<<"SEK">>},
-%%   {<<"uid1">>,<<"669a5eea-ab6c-4e76-b282-992a6dbbb794">>},
-%%   {<<"uid2">>,<<"mattias.thell@gmail.com">>}]
-update_debts(DebtsDB, UDebtsDB) ->
-    dets:traverse(DebtsDB,
-                  fun({{TUid1,TUid2},Props}) ->
-                          U1 = users:get(TUid1),
-                          U2 = users:get(TUid2),
-                          case {U1,U2} of
-                              {no_such_user, _Any} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
-                              {_Any, no_such_user} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
-                              _ ->
-                          Uid1 = element(2,U1),
-                          Uid2 = element(2,U2),
-                          Currency = proplists:get_value(?CURRENCY, Props),
-                          Amount = proplists:get_value(?AMOUNT, Props),
-                          NV =
-                              case Uid1 < Uid2 of
-                                  true ->
-                                      {{Uid1,Uid2}, [?AMOUNT(Amount),
-                                                     ?CURRENCY(Currency),
-                                                     ?UID1(Uid1),
-                                                     ?UID2(Uid2)
-                                                    ]};
-                                  false ->
-                                      UUid1 = Uid2,
-                                      UUid2 = Uid1,
-                                      {{UUid1,UUid2}, [?AMOUNT(-1 * Amount),
-                                                       ?CURRENCY(Currency),
-                                                       ?UID1(UUid1),
-                                                       ?UID2(UUid2)
-                                                      ]}
-                              end,
-
-                          db_w:insert(UDebtsDB,NV)
-                          end,
-                          continue end).
-
-%% {<<"be42cd40-d2f4-46ff-a0d4-2394baf96081">>,
-%%  [{<<"uid1">>,<<"321a83b3-050d-4761-9923-5fed8af4b787">>},
-%%   {<<"uid2">>,<<"mlokubo@gmail.com">>},
-%%   {<<"amount">>,60},
-%%   {<<"reason">>,<<"Borrowed Funds">>},
-%%   {<<"timestamp">>,1387549189324059},
-%%   {<<"currency">>,<<"USD">>},
-%%   {<<"uuid">>,<<"be42cd40-d2f4-46ff-a0d4-2394baf96081">>},
-%%   {<<"server_timestamp">>,1387549189324076},
-%%   {<<"org_debt">>,[{<<"currency">>,<<"USD">>},{<<"amount">>,60}]}
-update_transactions(TransactionsDB, UTransactionsDB) ->
-    dets:traverse(TransactionsDB,
-                  fun({DebtId, PropList}) ->
-                          TUid1 = proplists:get_value(?UID1, PropList),
-                          TUid2 = proplists:get_value(?UID2, PropList),
-                          User1 = users:get(TUid1),
-                          User2 = users:get(TUid2),
-                          case {User1,User2} of
-                              {no_such_user, _Any} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [User1,User2, TUid1, TUid2]);
-                              {_Any, no_such_user} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [User1,User2, TUid1, TUid2]);
-                              _ ->
-                          Uid1 = element(2,User1),
-                          Uid2 = element(2,User2),
-                          UP = proplists:delete(?UID1, PropList),
-                          UP1 = proplists:delete(?UID2, UP),
-                          ResP = [?UID1(Uid1),?UID2(Uid2)] ++ UP1,
-                          db_w:insert(UTransactionsDB, {DebtId,ResP})
-                          end,
-                          continue
-                  end).
-
-%% {<<"khaledelkalla@gmail.com">>,
-%%  [{approved_debts,[<<"e21fa552-4760-47ec-8cbb-f596f74b32bc">>,
-%%                    <<"4670d49c-7360-44f9-9ae7-00a31a98182d">>,
-%%                    <<"20172d28-5212-43a4-933f-7977da9f4449">>,
-%%                    <<"e911d3d0-5b45-4980-9006-1f6c0ffb65a0">>,
-%%                    <<"bfa0f56d-3b42-4f2e-8ba1-8ec210cf2065">>,
-%%                    <<"e9db644f-27f5-449a-9f65-3d3d275cf25e">>]}
-update_at(AT, D) ->
-    dets:traverse(AT,
-                  fun({Uid, List}) ->
-                          User = users:get(Uid),
-                          case User of
-                              no_such_user ->
-                                  lager:info("Missing user ~p With list ~p~n",
-                                             [Uid,List]);
-                              _ ->
-                                  UUid = element(2,User),
-                                  db_w:insert(D,{UUid, List})
-                          end,
-                          continue
-                  end).
-
-
-
-sort_user_debt(P1, P2, Amount) ->
-    case P1 < P2 of
-          true -> [{?UID1, P1}, {?UID2, P2}, {?AMOUNT, Amount}];
-                  %%{Uuid, {P1,P2}, TimeStamp, Reason, Amount, Misc, Currency};
-          _ -> [{?UID1, P2}, {?UID2, P1}, {?AMOUNT, (-1) * Amount}]
-               %%{Uuid, {P2,P1}, TimeStamp, Reason, (-1) * Amount, Misc, Currency}
-     end.
-
-sort_user_debt(Uuid, P1, P2, TimeStamp, Reason, Amount, Misc, Currency) ->
-     case P1 < P2 of
-          true -> {Uuid, {P1,P2}, TimeStamp, Reason, Amount, Misc, Currency};
-          _ -> {Uuid, {P2,P1}, TimeStamp, Reason, (-1) * Amount, Misc, Currency}
-     end.
-
-%%Fix to be safe
-add_to_earlier_debt({_Uuid, Key = {Uid1, Uid2}, _TimeStamp, _Reason, Amount, _Misc, Currency}, Debts) ->
-    lager:info("Adding to earlier debt ~p Amount ~p", [Key, Amount]),
-    case db_w:lookup(Debts, Key) of
-        [] -> db_w:insert(Debts, {Key, [ amount(Amount)
-                                       , currency(Currency)
-                                       , uid1(Uid1)
-                                       , uid2(Uid2)]});
-        [{_,List}] ->
-            Currency = currency(List),
-            db_w:insert(Debts, {Key, update_prop(?AMOUNT, List, fun(OldAmount) -> Amount + OldAmount end)});
-        _ -> error
-    end.
-
-add_to_earlier_debt(Amount, Key = {Uid1, Uid2}, Currency, Debts) ->
-    lager:info("Adding to earlier debt ~p Amount ~p Currency ~p", [Key, Amount, Currency]),
-    case db_w:lookup(Debts, Key) of
-        [] -> db_w:insert(Debts,  {Key, [ amount(Amount)
-                                        , currency(Currency)
-                                        , uid1(Uid1)
-                                        , uid2(Uid2)]});
-        [{Key, List}] ->
-            Currency = currency(List),
-            db_w:insert(Debts,{Key, update_prop(?AMOUNT, List, fun(OldAmount) -> Amount + OldAmount end)});
-        _ -> error
-    end.
 
 currency_and_amount(Key, Props, DebtDb) ->
     case db_w:lookup(DebtDb, Key) of
@@ -776,41 +480,6 @@ get_timestamp() ->
     {Mega, Seconds, Milli} = erlang:now(),
     Mega * 1000000000000 + Seconds * 1000000 + Milli.
 
-lookup_dets(Name, Key, Default) ->
-    case db_w:lookup(Name, Key) of
-        []  -> Default;
-        Any -> Any
-    end.
-
-replace_prop(Key, List, Value) ->
-    [{Key, Value} | proplists:delete(Key, List)].
-
-update_prop(Key, List, Fun) ->
-    FirstVal = proplists:get_value(Key, List), %% note unsafe
-    [{Key, Fun(FirstVal)} | proplists:delete(Key, List)].
-
-approved_debts(Key, Name) ->
-    [{_, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    ?APPROVED_DEBTS(Props).
-
-%% key = uid
-%% Name = table name
-%% Items [items] list of items to insert
-update_approved_debts(Key, Name, Items) ->
-    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    ok = db_w:delete(Name, Key),
-    lager:info("updating approved debts for ~p with ~p", [Key, Items]),
-    ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
-                                         ?APPROVED_DEBTS(Props) ++ Items)}).
-
-remove_debt(Key, Name, Item) ->
-    [{_Key, Props}] = lookup_dets(Name, Key, [{any, []}]),
-    ok = db_w:delete(Name, Key),
-    NewEntry = lists:delete(Item,?APPROVED_DEBTS(Props)),
-%    lager:info("removing debts: ~p~n", [NewEntry]),
-    ok = db_w:insert(Name, {Key, replace_prop(?APPROVED_DEBTS, Props,
-                                         NewEntry)}).
-
 % we might need to create a valid uid here,
 % or if the uid already exist then we are fine
 % or if the uid contains @
@@ -818,29 +487,6 @@ verify_uid(undefined, _Db) ->
     binary_uuid();
 verify_uid(User, _Db) ->
     User.
-
-get_tot_debts(Debts, User) ->
-    DebtsList  = db_w:match(Debts, {{User, '$1'}, '$2'}),
-    DebtsList2 = db_w:match(Debts, {{'$1', User}, '$2'}),
-    DebtLists  = lists:map(fun([V1,V2]) -> {{User, V1}, V2} end, DebtsList),
-    DebtLists2 = lists:map(fun([V1,V2]) -> {{V1, User}, V2} end, DebtsList2),
-    DebtLists ++ DebtLists2.
-
-
-%% add_approved_debt(Uid1, Uid2, ApprovalDebt, Uuid, SortedDebt, Debts) ->
-%%     ok = add_to_earlier_debt(SortedDebt, Debts),
-%%     update_approved_debts(Uid1, ApprovalDebt, [Uuid]),
-%%     update_approved_debts(Uid2, ApprovalDebt, [Uuid]).
-
-add_transaction(Props, ApprovalDebts, Debts) ->
-    Uuid = proplists:get_value(?UUID, Props),
-    add_to_earlier_debt( proplists:get_value(?AMOUNT, Props)
-                       , { proplists:get_value(?UID1, Props)
-                         , proplists:get_value(?UID2, Props)}
-                      , proplists:get_value(?CURRENCY, Props)
-                      , Debts),
-    update_approved_debts(proplists:get_value(?UID1, Props), ApprovalDebts, [Uuid]),
-    update_approved_debts(proplists:get_value(?UID2, Props), ApprovalDebts, [Uuid]).
 
 uid_to_lower(undefined) ->
     lager:info("undefined uui"),
@@ -858,54 +504,17 @@ user_exist(Uid, _State) ->
         _  -> true
     end.
 
-get_and_check_props(Props, PropList) ->
-    lists:map(fun(Prop) ->
-                      [{Prop, _} = Property] = proplists:lookup_all(Prop, PropList),
-                      Property
-              end, Props).
-
-get_value(Key, Items) ->
-    proplists:get_value(Key, Items).
-
-
-%% Change one UID in a debt
-%% this swaps UID1 and UID2 if needed
-change_uid(NewUid, OldUid, Items) ->
-    ClearedItems = lists:foldl(fun(Key, Acc) ->
-                                       proplists:delete(Key, Acc) end,
-                               Items, [?UID1, ?UID2, ?AMOUNT]),
-    case get_value(?UID1, Items) of
-        OldUid ->
-            sort_user_debt(NewUid, get_value(?UID2, Items), get_value(?AMOUNT, Items))
-                ++ ClearedItems;
-        _        ->
-            sort_user_debt(get_value(?UID1, Items), NewUid, get_value(?AMOUNT, Items))
-                ++ ClearedItems
-    end.
-
 amount(Arg) ->
     props(?AMOUNT, Arg).
 
 uid(Arg) ->
     props(?UID, Arg).
 
-uid1(Arg) ->
-    props(?UID1, Arg).
-
-uid2(Arg) ->
-    props(?UID2, Arg).
-
 currency(Arg) ->
     props(?CURRENCY, Arg).
 
-timestamp(Arg) ->
-    props(?TIMESTAMP, Arg).
-
 server_timestamp(Arg) ->
     props(?SERVER_TIMESTAMP, Arg).
-
-%% user_type(Arg) ->
-%%     props(?USER_TYPE, Arg).
 
 username(Arg) ->
     props(?USER, Arg).

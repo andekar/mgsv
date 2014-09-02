@@ -3,7 +3,7 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1, count_by_usertype/1]).
+-export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1, count_by_usertype/1, update_find/1]).
 
 -record(user_mapping,
         { uid :: binary(), %% id from google or facebook or internal if local
@@ -20,12 +20,16 @@
           user_edit_details = #edit_details{} :: #edit_details{}
         }).
 
-add(Uid, Username, DisplayName, UserType, Currency, ReqBy) ->
+add(Uid, Username, DisplayName, UserType, Currency, ReqBy = #user{}) ->
     User = create(Uid, Username, DisplayName, UserType, Currency, ReqBy),
     add(User, ReqBy),
+    User;
+add(Uid, Username, DisplayName, UserType, Currency, Uid) ->
+    User = create(Uid, Username, DisplayName, UserType, Currency, Uid),
+    add(User, User),
     User.
 
-add(User, ReqBy) ->
+add(User, ReqBy = #user{}) ->
     case [users:get({username, User#user.username}),
           users:get({uid, User#user.uid})] of
         [no_such_user, no_such_user] ->
@@ -36,9 +40,39 @@ add(User, ReqBy) ->
         _ -> user_already_exist
     end.
 
+%%Todo what if not registered?!?
+-spec update_find(#user_data{}) -> #user{} | no_such_user.
+update_find(Userdata = #user_data{}) ->
+    Id = Userdata#user_data.id,
+    Username = Userdata#user_data.username,
+    U = case users:get({uid, Id}) of
+            #user{ username = Username} = U1 ->  %% all is well here
+                U1;
+            #user{} = U2 ->
+                lager:error("Something is wrong, user might have changed username ~p~n~p~n", [U2, Userdata]),
+                no_such_user;
+            no_such_user ->
+                case users:get({username, Username}) of
+                    #user{ username = Username,
+                           uid = Username} = U3 -> %% here we must update uid also we should check if this user is already existing.....
+
+                        UUser = U3#user{uid = Id},
+                        update_remove_usermapping(U3, UUser),
+                        lager:info("Updated user from ~n~p~nto~n~p~n", [U3, UUser]),
+                        UUser;
+                    _ -> no_such_user
+                end
+        end,
+    Userdata#user_data{user = U}.
+
 update(User, ReqBy) ->
-    UserInfo = create_userinfo(User, ReqBy),
+    UserInfo = create_userinfo(User,ReqBy),
     mnesia:dirty_write(UserInfo).
+
+update_remove_usermapping(OldUser,NewUser) ->
+    mnesia:dirty_delete(user_mapping, OldUser#user.uid),
+    UserMapping = create_mapping(NewUser, NewUser),
+    mnesia:dirty_write(UserMapping).
 
 delete(User = #user{}) ->
     mnesia:dirty_delete(user_info, User#user.internal_uid),
@@ -46,22 +80,25 @@ delete(User = #user{}) ->
 delete(Uid) ->
     delete(users:get(Uid)).
 
-create(Uid, Username, DisplayName, UserType, Currency, ReqBy) ->
+create(Uid, Username, DisplayName, UserType, Currency, ReqBy = #user{}) ->
     #user{
        uid = common:sb(Uid),
        username = common:sb(Username),
        displayname = common:sb(DisplayName),
        user_type = common:sb(UserType),
        currency = common:sb(Currency),
-       user_edit_details = common:mod_edit_details(#edit_details{}, common:sb(ReqBy))
-      }.
+       user_edit_details = common:mod_edit_details(#edit_details{}, ReqBy)
+      };
+%% hack so that users can add themselves
+create(Uid, Username, DisplayName, UserType, Currency, Uid) ->
+    create(Uid, Username, DisplayName, UserType, Currency, #user{uid = common:sb(Uid)}).
 
 create_userinfo(User, ReqBy) ->
     #user_info{
        internal_uid = User#user.internal_uid,
        displayname = User#user.displayname,
        currency = User#user.currency,
-       user_edit_details = common:mod_edit_details(User#user.user_edit_details, common:sb(ReqBy))
+       user_edit_details = common:mod_edit_details(User#user.user_edit_details, ReqBy)
       }.
 
 create_mapping(User, ReqBy) ->
@@ -81,7 +118,7 @@ get({uid, UserId}) ->
       mnesia:dirty_read(user_mapping, UserId));
 get({internal_uid, UserId}) ->
     from_mapping(
-      mnesia:dirty_index_read(user_mapping, UserId, #user_mapping.internal_uid));
+      mnesia:dirty_index_read(user_mapping, UserId, internal_uid));
 get(Id) ->
     from_mapping(mnesia:dirty_read(user_mapping, Id) ++
             mnesia:dirty_index_read(user_mapping, Id, #user_mapping.username)).
@@ -103,7 +140,9 @@ from_mapping([UserMapping]) ->
        user_edit_details = UserInfo#user_info.user_edit_details
       };
 from_mapping([]) ->
-    no_such_user.
+    no_such_user;
+from_mapping(Any) ->
+    lager:error("Got wrong info in from_mapping ~p~n", [Any]).
 
 create_mappingtable() ->
     Res = mnesia:create_table( user_mapping,
@@ -132,7 +171,7 @@ update_parts([_NotSupported|Rest], User) ->
     update_parts(Rest, User).
 
 to_proplist(User) ->
-    [{<<"uid">>, User#user.uid},
+    [{<<"uid">>, User#user.username},
      {<<"user">>, User#user.displayname},
      {<<"usertype">>, User#user.user_type},
      {<<"currency">>, User#user.currency},
@@ -152,7 +191,7 @@ reconstruct(DBName) ->
                           UserType = proplists:get_value(<<"usertype">>, PropList),
                           Currency = proplists:get_value(<<"currency">>, PropList),
                           ServerTimestamp = proplists:get_value(<<"server_timestamp">>, PropList),
-                          User = create(Uid, Uid, DisplayName, UserType, Currency, ""),
+                          User = create(Uid, Uid, DisplayName, UserType, Currency, Uid),
                           UUID = User#user.internal_uid,
                           Edits = #edit_details{
                                      created_at = ServerTimestamp,

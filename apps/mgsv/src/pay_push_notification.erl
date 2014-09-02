@@ -126,7 +126,7 @@ handle_info(Msg, State) ->
     {noreply, State}.
 
 terminate(Reason, State) ->
-    lager:emergency("TERMINATING ~p", [Reason]),
+    lager:emergency("TERMINATING ~p~n~p", [Reason,erlang:get_stacktrace()]),
     db_w:close(State),
     ok.
 

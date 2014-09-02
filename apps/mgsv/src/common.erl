@@ -10,8 +10,9 @@ sb(Arg) when is_list(Arg) ->
 sb(Arg) ->
     Arg.
 
-mod_edit_details(Edits = #edit_details{}, InternalUid) ->
+mod_edit_details(Edits = #edit_details{}, ReqBy = #user{}) ->
     Now = get_timestamp(),
+    InternalUid = ReqBy#user.internal_uid,
     {CreatedBy, CreatedAt} =
         case Edits#edit_details.created_by of
             undefined ->

@@ -126,6 +126,9 @@
 -define(ORG_DEBT, <<"org_debt">>).
 -define(ORG_DEBT(Data), {?ORG_DEBT, Data}).
 
+-define(CLIENT_VERSION, <<"client_version">>).
+-define(CLIENT_OS, <<"client_os">>).
+
 %% contains currency and amount of the registered
 %% currency, this one is not mandatory
 %-define(REG_DEBT, <<"reg_debt">>).

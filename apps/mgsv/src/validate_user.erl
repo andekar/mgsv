@@ -14,7 +14,9 @@
 -define(GOOGLE_URL, "https://www.googleapis.com/oauth2/v1/userinfo?access_token=").
 -define(FACEBOOK_URL, "https://graph.facebook.com/me?access_token=").
 -define(EMAIL, <<"email">>).
+-define(GMAIL_ID, <<"id">>).
 -define(FBUID, <<"username">>).
+-define(FB_ID, <<"id">>).
 
 -define(VALIDATE_USR_TBL, validate_usr_tbl).
 -define(INTERVAL, 60000 * 60). % One hour
@@ -30,17 +32,15 @@ init([]) ->
     timer:send_interval(?INTERVAL, self(), trigger),
     {ok, [?VALIDATE_USR_TBL]}.
 
-%% handle_call({validate, _Token, <<"andersk84@gmail.com">>, ?GMAIL_USER}, _From, State) ->
-%%     {reply, <<"andersk84@gmail.com">>, State};
 handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
     ShaToken = crypto:hash(sha512, Token),
     case ets:lookup(TabName, Email) of
-        [{Email, ShaToken}] ->
-            {reply, Email, State};
+        [{Email, Id, ShaToken}] ->
+            {reply, {Email, Id}, State};
         _ -> case validate(Token, ?GMAIL_USER) of
-                 Email ->
-                     ets:insert(TabName, {Email, ShaToken}),
-                     {reply, Email, State};
+                 {Email, Id} ->
+                     ets:insert(TabName, {Email, Id, ShaToken}),
+                     {reply, {Email, Id}, State};
                  _ -> {reply, undefined, State}
              end
     end;
@@ -48,12 +48,12 @@ handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
 handle_call({validate, Token, Uid, ?FACEBOOK_USER}, _From, State = [TabName]) ->
     ShaToken = crypto:hash(sha512, Token),
     case ets:lookup(TabName, Uid) of
-        [{Uid, ShaToken}] ->
-            {reply, Uid, State};
+        [{Uid, Id, ShaToken}] ->
+            {reply, {Uid, Id}, State};
         _ -> case validate(Token, ?FACEBOOK_USER) of
-                 Uid ->
-                     ets:insert(TabName, {Uid, ShaToken}),
-                     {reply, Uid, State};
+                 {Uid, Id} ->
+                     ets:insert(TabName, {Uid, Id, ShaToken}),
+                     {reply, {Uid, Id}, State};
                  _ -> {reply, undefined, State}
              end
     end;
@@ -76,11 +76,13 @@ handle_info(Msg, State) ->
     {noreply, State}.
 
 terminate(Reason, _State) ->
-    lager:emergency("TERMINATING ~p", [Reason]),
+    lager:emergency("TERMINATING ~p~n~p", [Reason, erlang:get_stacktrace()]),
     ok.
 
-code_change(OldVsn, State, Extra) ->
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
+code_change(OldVsn, State = [Tab], Extra) ->
+    lager:info("UPGRADING VERSION validate_user ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
+    lager:info("clearing ets table with login info"),
+    ets:delete_all_objects(Tab),
     {ok, State}.
 
 
@@ -102,7 +104,7 @@ validate_google(Token) ->
     {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
         = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
     {struct, List} = mochijson2:decode(Body),
-    proplists:get_value(?EMAIL, List).
+    {proplists:get_value(?EMAIL, List), proplists:get_value(?GMAIL_ID, List)}.
 
 validate_facebook(Token) ->
     Method = get,
@@ -113,4 +115,4 @@ validate_facebook(Token) ->
     {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
         = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
     {struct, List} = mochijson2:decode(Body),
-    proplists:get_value(?FBUID, List).
+    {proplists:get_value(?FBUID, List), proplists:get_value(?FB_ID, List)}.
