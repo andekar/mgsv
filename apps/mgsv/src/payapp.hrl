@@ -19,6 +19,9 @@
 %% ios token
 -define(IOS_TOKEN, <<"ios_token">>).
 -define(IOS_TOKEN(Token), {?IOS_TOKEN, Token}).
+%% android token
+-define(ANDROID_TOKEN, <<"android_token">>).
+-define(ANDROID_TOKEN(Token), {?ANDROID_TOKEN, Token}).
 
 %% Uniq uid
 -define(UUID, <<"uuid">>).

@@ -126,8 +126,8 @@ handle_call({change_userinfo, Ud, UserInfo}, _From, State) ->
     case Ud#user_data.user of
         User = #user{} ->
             UUser = users:update_parts(UserInfo, User),
-            users:update(UUser, UUser),
-            {reply, [users:to_proplist(UUser)], State};
+            users:update(UUser, User),
+            {reply, [users:to_proplist(UUser, Ud)], State};
         Other ->
             lager:error("Tried changing username got ~p from db Ud ~p Un ~p"
                        , [Other, Ud, UserInfo]),
@@ -138,7 +138,7 @@ handle_call({get_user_debt, U},  _From, State) ->
     User = U#user_data.user,
     Debts = debt:get(User),
     UDebts = lists:map(fun(V) ->
-                               debt:to_proplist(V) end,
+                               debt:to_proplist(V, U) end,
                                Debts),
     {reply, UDebts, State};
 
@@ -147,12 +147,12 @@ handle_call({get_user_transactions, Ud},  _From, State) ->
     Transactions = transaction:get(User),
     DebtLists =
         lists:map(fun(Transaction) ->
-                          transaction:to_proplist(Transaction)
+                          transaction:to_proplist(Transaction,Ud)
              end, Transactions),
     {reply, DebtLists, State};
 
 %%TODO fix transactions
-handle_call({get_usernames, Uids, _Userdata}, _From, State) ->
+handle_call({get_usernames, Uids, Userdata}, _From, State) ->
     RecUsers = lists:filter(fun({?UID, _}) -> true;
                                (_) -> false end, Uids),
     RetUsers = lists:map(fun({?UID, TUid}) ->
@@ -160,7 +160,7 @@ handle_call({get_usernames, Uids, _Userdata}, _From, State) ->
                       case users:get(Uid) of
                           no_such_user -> [{error, user_not_found}];
                           User ->
-                              ?JSONSTRUCT(users:to_proplist(User))
+                              ?JSONSTRUCT(users:to_proplist(User, Userdata))
                       end
               end, RecUsers),
     {reply, RetUsers, State};
@@ -182,22 +182,27 @@ handle_call({add, Ud, Struct}, _From, State) ->
                        do_not_add_between_two_local_users;
                    _       -> ok
                end,
-    Status = case {AddLocal} of
-                 {ok} ->
-                     ok = debt:add(Transaction, ReqBy),
-                     transaction:add(Transaction, ReqBy),
-                     lager:info("Inserting transaction: ~p", [Transaction]),
-                     Reason = Transaction#transaction.reason,
-                     case ReqBy of %% TODO change this?
-                         User1 -> pay_push_notification:notify_user(Username2, Reason);
-                         User2 -> pay_push_notification:notify_user(Username1, Reason);
-                         _ -> pay_push_notification:notify_user(Username1, Reason),
-                              pay_push_notification:notify_user(Username2, Reason)
-                     end,
-                     <<"ok">>;
-                 _ -> <<"failed">>
-             end,
-    {reply, transaction:to_proplist(Transaction)  ++
+    {RT, Status} = case AddLocal of
+                       ok ->
+                           UT = debt:add_transaction(Transaction, ReqBy),
+                           transaction:add(UT, ReqBy),
+                           lager:info("Inserting transaction: ~p", [UT]),
+                           Reason = UT#transaction.reason,
+                           Message = list_to_binary(
+                                       "A transaction was added with reason \""
+                                       ++ binary_to_list(Reason)
+                                       ++ "\" the transaction was added by "
+                                       ++ binary_to_list(ReqBy#user.displayname)),
+                           case ReqBy of %% TODO change this?
+                               User1 -> pay_push_notification:notify_user(Username2, Message);
+                               User2 -> pay_push_notification:notify_user(Username1, Message);
+                               _ -> pay_push_notification:notify_user(Username1, Message),
+                                    pay_push_notification:notify_user(Username2, Message)
+                           end,
+                           {UT, <<"ok">>};
+                       _ -> {Transaction, <<"failed">>}
+                   end,
+    {reply, transaction:to_proplist(RT,Ud)  ++
          EchoUuid ++
          [?STATUS(Status)]
        , State};
@@ -247,12 +252,12 @@ handle_call({register, UserInfo, Ud}, _From, State) ->
                          no_such_user ->
                              User = users:add(UidLower,UidLower, UserName, UserType, Currency, RBy),
                              lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
-                                        [UidLower, username(UserName), UserType, Currency]),
+                                        [UidLower, UserName, UserType, Currency]),
                              User;
                          U  -> lager:info("User already exist"),
                                U
                      end,
-            {reply, users:to_proplist(RetUsr) ++ EchoUuid,  State};
+            {reply, users:to_proplist(RetUsr, Ud) ++ EchoUuid,  State};
         _ -> {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid, State}
     end;
 
@@ -332,8 +337,8 @@ handle_cast({remove_user_debt, TUuid, Userdata}, State) ->
 
 % The user transferring debts must be the creator (ReqBy)
 handle_cast({transfer_debts, TTOldUser, TTNewUser, Ud}, State) ->
-    TOldUser = users:get({username,?UID_TO_LOWER(TTOldUser)}),
-    TNewUser = users:get({username, ?UID_TO_LOWER(TTNewUser)}),
+    TOldUser = users:get(?UID_TO_LOWER(TTOldUser)),
+    TNewUser = users:get(?UID_TO_LOWER(TTNewUser)),
     ReqByU = Ud#user_data.user,
 
     lager:info("TOldUser ~p Username ~p~nTNewUser ~p username ~p~nReqByU ~p username ~p", [TOldUser, ?UID_TO_LOWER(TTOldUser), TNewUser, ?UID_TO_LOWER(TTNewUser), ReqByU, ?UID_TO_LOWER(TTNewUser)]),
@@ -382,8 +387,8 @@ handle_cast({transfer_debts, TTOldUser, TTNewUser, Ud}, State) ->
                            T#transaction{paid_for_username = TNewUser#user.username,
                                          paid_for = TNewUser#user.internal_uid}
               end,
-              transaction:add(UT, ReqByU),
-              debt:add(UT, ReqByU)
+              RT = debt:add_transaction(UT, ReqByU),
+              transaction:add(RT, ReqByU)
       end, Ts),
 
     DeleteU(),

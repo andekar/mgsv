@@ -3,7 +3,7 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/1, count_by_usertype/1, update_find/1]).
+-export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/2, count_by_usertype/1, update_find/1]).
 
 -record(user_mapping,
         { uid :: binary(), %% id from google or facebook or internal if local
@@ -20,6 +20,11 @@
           user_edit_details = #edit_details{} :: #edit_details{}
         }).
 
+add(_Uid, _Username, DisplayName, ?LOCAL_USER, Currency, ReqBy = #user{}) ->
+    Username = common:binary_uuid(),
+    User = create(Username, Username, DisplayName, ?LOCAL_USER, Currency, ReqBy),
+    add(User, ReqBy),
+    User;
 add(Uid, Username, DisplayName, UserType, Currency, ReqBy = #user{}) ->
     User = create(Uid, Username, DisplayName, UserType, Currency, ReqBy),
     add(User, ReqBy),
@@ -52,6 +57,7 @@ update_find(Userdata = #user_data{}) ->
                 lager:error("Something is wrong, user might have changed username ~p~n~p~n", [U2, Userdata]),
                 no_such_user;
             no_such_user ->
+                lager:info("users:get({uid, ~p})~nTrying request with invalid user ~p", [Id, Userdata]),
                 case users:get({username, Username}) of
                     #user{ username = Username,
                            uid = Username} = U3 -> %% here we must update uid also we should check if this user is already existing.....
@@ -60,7 +66,9 @@ update_find(Userdata = #user_data{}) ->
                         update_remove_usermapping(U3, UUser),
                         lager:info("Updated user from ~n~p~nto~n~p~n", [U3, UUser]),
                         UUser;
-                    _ -> no_such_user
+                    _ ->
+                        lager:info("users:get({username, ~p})~nTrying request with invalid user ~p", [Username, Userdata]),
+                        no_such_user
                 end
         end,
     Userdata#user_data{user = U}.
@@ -121,7 +129,8 @@ get({internal_uid, UserId}) ->
       mnesia:dirty_index_read(user_mapping, UserId, internal_uid));
 get(Id) ->
     from_mapping(mnesia:dirty_read(user_mapping, Id) ++
-            mnesia:dirty_index_read(user_mapping, Id, #user_mapping.username)).
+            mnesia:dirty_index_read(user_mapping, Id, #user_mapping.username) ++
+            mnesia:dirty_index_read(user_mapping, Id, #user_mapping.internal_uid)).
 
 count_by_usertype(UserType) ->
     length(mnesia:dirty_index_read(user_mapping, UserType, #user_mapping.user_type)).
@@ -167,10 +176,34 @@ update_parts([{?USER, DisplayName}|Rest], User) ->
     update_parts(Rest, User#user{displayname = DisplayName});
 update_parts([{?CURRENCY, Currency}|Rest], User) ->
     update_parts(Rest, User#user{currency = Currency});
-update_parts([_NotSupported|Rest], User) ->
+update_parts([NotSupported|Rest], User) ->
+    lager:info("Users.erl: Not supported variable ~p", [NotSupported]),
     update_parts(Rest, User).
 
-to_proplist(User) ->
+to_proplist(User, Userdata) ->
+    case {Userdata#user_data.version, Userdata#user_data.os} of
+        {"1.4", ios} ->
+            to_proplist_36(User);
+        _ ->
+            to_proplist_old(User)
+    end.
+
+to_proplist_36(User) ->
+    Fields = record_info(fields, user),
+    DFields = record_info(fields, edit_details),
+    [_|Vals] = tuple_to_list(User),
+    lists:zipwith(fun (user_edit_details, DY) ->
+                          [_|DVals] = tuple_to_list(DY),
+                          {<<"user_edit_details">>,
+                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                {atom_to_binary(A, utf8),B} end,
+                                        DFields, DVals))};
+                      (X, Y) ->
+                          {atom_to_binary(X, utf8),Y} end,
+                  Fields,
+                  Vals).
+
+to_proplist_old(User) ->
     [{<<"uid">>, User#user.username},
      {<<"user">>, User#user.displayname},
      {<<"usertype">>, User#user.user_type},

@@ -4,7 +4,7 @@
 -include("payapp.hrl").
 
 
--export([create_transactiontable/0, to_proplist/1, add/2, get/1, reconstruct/1,
+-export([create_transactiontable/0, to_proplist/2, add/2, get/1, reconstruct/1,
         from_proplist/1, delete/1]).
 
 create_transactiontable() ->
@@ -50,7 +50,37 @@ get([T1,T2]) ->
 delete(T = #transaction{}) ->
     mnesia:dirty_delete(transaction, T#transaction.transaction_id).
 
-to_proplist(Transaction) ->
+to_proplist(User, Userdata) ->
+    case {Userdata#user_data.version, Userdata#user_data.os} of
+        {"1.4", ios} ->
+            to_proplist_36(User);
+        _ ->
+            to_proplist_old(User)
+    end.
+
+to_proplist_36(User) ->
+    Fields = record_info(fields, transaction),
+    DFields = record_info(fields, edit_details),
+    OFields = record_info(fields, org_transaction),
+    [_|Vals] = tuple_to_list(User),
+    lists:zipwith(fun (edit_details, DY) ->
+                          [_|DVals] = tuple_to_list(DY),
+                          {<<"edit_details">>,
+                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                {atom_to_binary(A, utf8),B} end,
+                                        DFields, DVals))};
+                      (org_transaction, DY) ->
+                          [_|DVals] = tuple_to_list(DY),
+                          {<<"org_transaction">>,
+                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                {atom_to_binary(A, utf8),B} end,
+                                        OFields, DVals))};
+                      (X, Y) ->
+                          {atom_to_binary(X, utf8),Y} end,
+                  Fields,
+                  Vals).
+
+to_proplist_old(Transaction) ->
     [{?UUID, Transaction#transaction.transaction_id},
      {?UID1, Transaction#transaction.paid_by_username},
      {?UID2, Transaction#transaction.paid_for_username},
@@ -98,7 +128,17 @@ from_proplist(List) ->
       from_proplist(#transaction{}, UList2)).
 
 from_proplist(Transaction, []) ->
-    Transaction;
+    OrgTrans = Transaction#transaction.org_transaction,
+    case OrgTrans#org_transaction.amount of
+        undefined ->
+            Amount = Transaction#transaction.amount,
+            Currency = Transaction#transaction.currency,
+            UOrgTrans = OrgTrans#org_transaction{amount = Amount,
+                                                 currency = Currency},
+            Transaction#transaction{org_transaction = UOrgTrans};
+        _ ->
+            Transaction
+    end;
 from_proplist(T, [{?UID1, Uid1}|Rest]) ->
     User1 = users:get(Uid1),
     case User1 of

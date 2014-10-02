@@ -65,6 +65,8 @@ resource_exists(ReqData, Context) ->
 
         {'POST', ["ios_token"], https} ->
             {true, ReqData, Context};
+        {'POST', ["android_token"], https} ->
+            {true, ReqData, Context};
         {'DELETE', ["ios_token", _Badge], https} ->
             {true, ReqData, Context};
 
@@ -114,7 +116,7 @@ process_post(ReqData, Context) ->
                     Result
                 catch
                     _:Error ->
-                        lager:alert("CRASH ~p~n", [Error, erlang:get_stacktrace()]),
+                        lager:alert("CRASH ~p~n~p~n", [Error, erlang:get_stacktrace()]),
                         mochijson2:encode([[{error,request_failed}]])
                 end;
             _ -> mochijson2:encode([[{error, user_not_authenticated}]])
@@ -210,6 +212,7 @@ is_authorized(ReqData, Context) ->
         https ->
             %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
             UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
+            ExpectedProtocol = wrq:get_req_header("protocolversion", ReqData),
             {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
                                                    {true,Vars};
                                               (V,{true,{O,_}}) ->
@@ -221,7 +224,8 @@ is_authorized(ReqData, Context) ->
                                            end,
                                            {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
             UD = #user_data{os = Os,
-                            version = Version
+                            version = Version,
+                            expected_server_version = ExpectedProtocol
                            },
             lager:info("Got user-agent OS ~p Version ~p~n~p~n~n",[Os,Version, UserAgent]),
             case user_from_auth(wrq:get_req_header("authorization", ReqData)) of

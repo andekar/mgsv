@@ -84,6 +84,10 @@ handle_call({'POST', Ud, Path, Props, https}, _From, State) ->
             [{?FEEDBACK, Feedback}] = proplists:lookup_all(?FEEDBACK, Props),
             {ok, Result} = pay_server:add_feedback(Userdata#user_data.username, Feedback),
             {reply, {ok, mochijson2:encode([{?FEEDBACK, Result}])}, State};
+        ["android_token"] ->
+            [{_,AndroidToken}] = proplists:lookup_all(?ANDROID_TOKEN, Props),
+            pay_push_notification:add_user_android(Userdata#user_data.username, AndroidToken),
+            {reply, {ok, mochijson2:encode([{?ANDROID_TOKEN, AndroidToken}])}, State};
         ["ios_token"] ->
             [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Props),
             pay_push_notification:add_user_ios(Userdata#user_data.username, IosToken),
@@ -137,8 +141,15 @@ handle_call({'GET', Ud, Path, https}, _From, State) ->
                            _ ->
                                BinUid = list_to_binary(OtherUid),
                                lists:filter(fun(Props) ->
-                                                    lists:any(fun({?UID1, TBinUid}) -> TBinUid =:= BinUid;
-                                                                 ({?UID2, TBinUid}) -> TBinUid =:= BinUid;
+                                                    lists:any(fun({?UID1, TBinUid}) ->
+                                                                      TBinUid =:= BinUid;
+                                                                 ({?UID2, TBinUid}) ->
+                                                                      TBinUid =:= BinUid;
+                                                                 ({<<"paid_by">>, TBinUid}) ->
+                                                                      TBinUid =:= BinUid;
+                                                                 ({<<"paid_for">>, TBinUid}) ->
+                                                                      TBinUid =:= BinUid;
+
                                                                  (_) -> false
                                                               end, Props)
                                             end,

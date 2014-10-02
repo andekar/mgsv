@@ -3,7 +3,7 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create_debttable/0, add/2, delete/1, delete/2, get/1,to_proplist/1,reconstruct/1]).
+-export([create_debttable/0, add/2, add_transaction/2, delete/1, delete/2, get/1,to_proplist/2,reconstruct/1]).
 
 create_debttable() ->
     Res = mnesia:create_table( debt,
@@ -15,8 +15,9 @@ create_debttable() ->
 
 add(#debt{} = D, ReqBy = #user{}) ->
     UD = D#debt{ edit_details = common:mod_edit_details(D#debt.edit_details, ReqBy)},
-    mnesia:dirty_write(UD);
-add(#transaction{} = T, ReqBy = #user{}) ->
+    mnesia:dirty_write(UD).
+
+add_transaction(#transaction{} = T, ReqBy = #user{}) ->
     PaidB = T#transaction.paid_by,
     PaidF = T#transaction.paid_for,
     TCurrency = T#transaction.currency,
@@ -27,11 +28,20 @@ add(#transaction{} = T, ReqBy = #user{}) ->
             case {Debt#debt.uid1, Debt#debt.uid2, DCurrency} of
                 {PaidB,PaidF, TCurrency} ->
                     debt:add(Debt#debt{amount = Debt#debt.amount +
-                                           T#transaction.amount}, ReqBy);
+                                           T#transaction.amount}, ReqBy),
+                    T;
                 {PaidF,PaidB, TCurrency} ->
                     debt:add(Debt#debt{amount = Debt#debt.amount -
-                                           T#transaction.amount}, ReqBy);
-                _ -> error_not_same_currency
+                                           T#transaction.amount}, ReqBy),
+                    T;
+                {_P1,_P2, C} ->
+                    OrgTrans = T#transaction.org_transaction,
+                    OrgCurrency = OrgTrans#org_transaction.currency,
+                    OrgAmount = OrgTrans#org_transaction.amount,
+                    {res, Rate} = exchangerates_server:rate(OrgCurrency, C),
+                    add_transaction(T#transaction{currency = C,
+                                                  amount = OrgAmount * Rate},
+                                   ReqBy)
             end;
         [] -> debt:add(#debt{
                           uid1 = T#transaction.paid_by,
@@ -40,14 +50,15 @@ add(#transaction{} = T, ReqBy = #user{}) ->
                           uid2_username = T#transaction.paid_for_username,
                           amount = T#transaction.amount,
                           currency = T#transaction.currency
-                         }, ReqBy)
+                         }, ReqBy),
+              T
     end.
 
 delete(#debt{} = D) ->
     mnesia:dirty_delete(debt,D#debt.id).
 
 delete(#transaction{} = T, ReqBy = #user{}) ->
-    debt:add(T#transaction{amount = T#transaction.amount * -1}, ReqBy).
+    debt:add_transaction(T#transaction{amount = T#transaction.amount * -1}, ReqBy).
 
 get(User = #user{}) ->
     debt:get({uid, User#user.internal_uid});
@@ -65,7 +76,30 @@ get([T1,T2]) ->
 get(_) ->
     [].
 
-to_proplist(Debt) ->
+to_proplist(Debt, Userdata) ->
+    case {Userdata#user_data.version, Userdata#user_data.os} of
+        {"1.4", ios} ->
+            to_proplist_36(Debt);
+        _ ->
+            to_proplist_old(Debt)
+    end.
+
+to_proplist_36(User) ->
+    Fields = record_info(fields, debt),
+    DFields = record_info(fields, edit_details),
+    [_|Vals] = tuple_to_list(User),
+    lists:zipwith(fun (edit_details, DY) ->
+                          [_|DVals] = tuple_to_list(DY),
+                          {<<"edit_details">>,
+                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                {atom_to_binary(A, utf8),B} end,
+                                        DFields, DVals))};
+                      (X, Y) ->
+                          {atom_to_binary(X, utf8),Y} end,
+                  Fields,
+                  Vals).
+
+to_proplist_old(Debt) ->
     [{?UID1, Debt#debt.uid1_username},
      {?UID2, Debt#debt.uid2_username},
      {?AMOUNT, Debt#debt.amount},
