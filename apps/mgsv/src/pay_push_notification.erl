@@ -13,7 +13,8 @@
          notify_user/2,
          clear_counter/1,
          print_users/0,
-         remove_ios_token/1]).
+         remove_ios_token/1,
+         remove_android_token/2]).
 
 -record(state, {
           ios,
@@ -60,6 +61,9 @@ notify_user(Uuid, Message) ->
 
 remove_ios_token(Token) ->
     gen_server:cast(?MODULE, {remove_ios_token, Token}).
+
+remove_android_token(Uuid, DevId) ->
+    gen_server:cast(?MODULE, {remove_android_token, Uuid, DevId}).
 
 handle_call(print_users, _From, #state {ios = IOS,
                                         android = Android} = State) ->
@@ -116,7 +120,6 @@ handle_cast({notify_user, Uuid, Message}, #state{ios = IOS,
     AndroidMessage = [{<<"data">>, [
                                     {<<"message">>, Message}
                                    ]}],
-    io:format("android message ~p", [AndroidMessage]),
     case dets:lookup(IOS, Uuid) of
         Any when is_list(Any) ->
             lists:map(fun({_Uuid, DevTok, Count}) ->
@@ -134,7 +137,7 @@ handle_cast({notify_user, Uuid, Message}, #state{ios = IOS,
     case dets:lookup(Android, Uuid) of
         Any2 when is_list(Any2) ->
             lists:map(fun({_Uuid, DevTok}) ->
-                              lager:info("devicetoken ~p message ~p Uuid ~p", [DevTok, binary_to_list(Message), Uuid]),
+                              lager:info("devicetoken ~p message ~p Uuid ~p", [DevTok, AndroidMessage, Uuid]),
                               gcm:push(android, [DevTok], AndroidMessage)
                       end, Any2);
         _ -> ok
@@ -176,6 +179,12 @@ handle_cast({remove_ios_token, Token}, #state{ios = IOS,
     lists:map(fun(Item) ->
                       lager:info("Removing token ~p ", [Item]),
                       dets:delete_object(IOS, Item) end, List),
+    {noreply, State};
+
+handle_cast({remove_android_token, RUuid, Token}, #state{ios = _IOS,
+                                                  android = Android} = State) ->
+    lager:info("Removing token ~p ", [{RUuid, Token}]),
+    dets:delete_object(Android, {RUuid, Token}),
     {noreply, State};
 
 handle_cast(All, State) ->

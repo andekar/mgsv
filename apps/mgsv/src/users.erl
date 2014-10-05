@@ -181,8 +181,8 @@ update_parts([NotSupported|Rest], User) ->
     update_parts(Rest, User).
 
 to_proplist(User, Userdata) ->
-    case {Userdata#user_data.version, Userdata#user_data.os} of
-        {"1.4", ios} ->
+    case Userdata#user_data.protocol of
+        "0.36" ->
             to_proplist_36(User);
         _ ->
             to_proplist_old(User)

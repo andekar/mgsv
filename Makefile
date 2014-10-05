@@ -28,3 +28,6 @@ rel:
 
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'
+
+small:
+	@./rebar compile skip_deps=true

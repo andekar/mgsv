@@ -36,6 +36,9 @@ handle_call({'DELETE', Ud, [Path, StrId], https}, _From, State) ->
         "ios_token" ->
             pay_push_notification:clear_counter(Userdata#user_data.username),
             {reply, ok, State};
+        "android_token" ->
+            pay_push_notification:remove_android_token(Userdata#user_data.username, Id),
+            {reply, ok, State};
         _ -> lager:alert("Unknown path ~p", [Path]),
              {reply, failed, State}
     end;
@@ -51,8 +54,12 @@ handle_call({'PUT', Ud, Path, Props, https}, _From, State) ->
             [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Props),
             [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Props),
             lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, Userdata]),
-            pay_server:transfer_debts(OldUid, NewUid, Userdata),
-            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+            case pay_server:transfer_debts(OldUid, NewUid, Userdata) of
+                ok ->
+                    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+                {nok, Error} ->
+                    {reply, {nok, Error}, State}
+            end;
         _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
     end;
 

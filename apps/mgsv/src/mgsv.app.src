@@ -13,7 +13,8 @@
                   ossp_uuid,
                   ssl,
                   asn1,
-                  exchangerates
+                  exchangerates,
+                  gcm
                  ]},
   {mod, { mgsv_app, []}},
   {env, []}

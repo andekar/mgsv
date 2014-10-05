@@ -53,5 +53,5 @@
           id = <<"">>,
           user_type = <<"">>,
           user = no_such_user:: #user{} | no_such_user,
-          expected_server_version = <<"">>
+          protocol = <<"">>
         }).

@@ -77,8 +77,8 @@ get(_) ->
     [].
 
 to_proplist(Debt, Userdata) ->
-    case {Userdata#user_data.version, Userdata#user_data.os} of
-        {"1.4", ios} ->
+    case Userdata#user_data.protocol of
+        "0.36" ->
             to_proplist_36(Debt);
         _ ->
             to_proplist_old(Debt)

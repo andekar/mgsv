@@ -68,7 +68,7 @@ change_user(OldUser, NewUser) ->
     gen_server:cast(?MODULE, {change_username, OldUser, NewUser}).
 
 transfer_debts(OldUser, NewUser, ReqBy) ->
-    gen_server:cast(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
+    gen_server:call(?MODULE, {transfer_debts, OldUser, NewUser, ReqBy}).
 
 remove_user_debt(Uuid, Userdata) ->
     gen_server:cast(?MODULE,{remove_user_debt, Uuid, Userdata}).
@@ -261,6 +261,72 @@ handle_call({register, UserInfo, Ud}, _From, State) ->
         _ -> {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid, State}
     end;
 
+% The user transferring debts must be the creator (ReqBy)
+handle_call({transfer_debts, TTOldUser, TTNewUser, Ud}, _From, State) ->
+    try
+        TOldUser = users:get(?UID_TO_LOWER(TTOldUser)),
+        TNewUser = users:get(?UID_TO_LOWER(TTNewUser)),
+        ReqByU = Ud#user_data.user,
+
+        lager:info("TOldUser ~p Username ~p~nTNewUser ~p username ~p~nReqByU ~p username ~p", [TOldUser, ?UID_TO_LOWER(TTOldUser), TNewUser, ?UID_TO_LOWER(TTNewUser), ReqByU, ?UID_TO_LOWER(TTNewUser)]),
+        %% Check that we do not transfer to the same user
+        ok = case TOldUser#user.username == TNewUser#user.username of
+                 true -> trying_to_transfer_to_self_error;
+                 _ -> ok
+             end,
+        ok = case ReqByU#user.username == TNewUser#user.username of
+                 true -> trying_to_add_to_self_error;
+                 _ -> ok
+             end,
+                                                % to make sure we transfer only uuid users we check that the id does not contain an @
+        0 = string:rstr(binary_to_list(TOldUser#user.username), "@"),
+
+        [Debt] = debt:get([TOldUser,ReqByU]),
+        [NewDebt] = debt:get([TNewUser,ReqByU]),
+
+        %% currency must be same
+        ok = case Debt#debt.currency == NewDebt#debt.currency of
+                 true -> ok;
+                 _ -> not_same_currency
+             end,
+
+        %% if there is just one debt
+        %% BUT DO THIS LAST
+        DeleteU =
+            case {debt:get(TOldUser), TOldUser#user.user_type} of
+                {[#debt{}], ?LOCAL_USER} ->
+                    fun() -> users:delete(TOldUser) end;
+                {[], ?LOCAL_USER} ->
+                    fun() -> users:delete(TOldUser) end;
+                _ -> fun() -> ok end
+            end,    % delete the debt
+
+        Ts = transaction:get(TOldUser),
+        OldUsername = TOldUser#user.username,
+        debt:delete(Debt),
+        lists:foreach(
+          fun(T) ->
+                  UT = case T#transaction.paid_by_username of
+                           OldUsername ->
+                               T#transaction{paid_by_username = TNewUser#user.username,
+                                             paid_by = TNewUser#user.internal_uid};
+                           _ ->
+                               T#transaction{paid_for_username = TNewUser#user.username,
+                                             paid_for = TNewUser#user.internal_uid}
+                       end,
+                  RT = debt:add_transaction(UT, ReqByU),
+                  transaction:add(RT, ReqByU)
+          end, Ts),
+
+        DeleteU(),
+        lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
+        {reply, ok, State}
+    catch
+        _:Error ->
+            lager:alert("CRASH ~p~n~p", [Error, erlang:get_stacktrace()]),
+            {reply, {nok, Error}, State}
+    end;
+
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
     {reply, ok, State}.
@@ -335,65 +401,6 @@ handle_cast({remove_user_debt, TUuid, Userdata}, State) ->
     DeleteU(),
     {noreply, State};
 
-% The user transferring debts must be the creator (ReqBy)
-handle_cast({transfer_debts, TTOldUser, TTNewUser, Ud}, State) ->
-    TOldUser = users:get(?UID_TO_LOWER(TTOldUser)),
-    TNewUser = users:get(?UID_TO_LOWER(TTNewUser)),
-    ReqByU = Ud#user_data.user,
-
-    lager:info("TOldUser ~p Username ~p~nTNewUser ~p username ~p~nReqByU ~p username ~p", [TOldUser, ?UID_TO_LOWER(TTOldUser), TNewUser, ?UID_TO_LOWER(TTNewUser), ReqByU, ?UID_TO_LOWER(TTNewUser)]),
-    %% Check that we do not transfer to the same user
-    ok = case TOldUser#user.username == TNewUser#user.username of
-             true -> trying_to_transfer_to_self_error;
-             _ -> ok
-         end,
-    ok = case ReqByU#user.username == TNewUser#user.username of
-              true -> trying_to_add_to_self_error;
-             _ -> ok
-         end,
-    % to make sure we transfer only uuid users we check that the id does not contain an @
-    0 = string:rstr(binary_to_list(TOldUser#user.username), "@"),
-
-    [Debt] = debt:get([TOldUser,ReqByU]),
-    [NewDebt] = debt:get([TNewUser,ReqByU]),
-
-    %% currency must be same
-    ok = case Debt#debt.currency == NewDebt#debt.currency of
-             true -> ok;
-             _ -> not_same_currency
-         end,
-
-    %% if there is just one debt
-    %% BUT DO THIS LAST
-    DeleteU =
-        case {debt:get(TOldUser), TOldUser#user.user_type} of
-            {[#debt{}], ?LOCAL_USER} ->
-                fun() -> users:delete(TOldUser) end;
-            {[], ?LOCAL_USER} ->
-                fun() -> users:delete(TOldUser) end;
-            _ -> fun() -> ok end
-        end,    % delete the debt
-
-    Ts = transaction:get(TOldUser),
-    OldUsername = TOldUser#user.username,
-    debt:delete(Debt),
-    lists:foreach(
-      fun(T) ->
-              UT = case T#transaction.paid_by_username of
-                       OldUsername ->
-                           T#transaction{paid_by_username = TNewUser#user.username,
-                                         paid_by = TNewUser#user.internal_uid};
-                       _ ->
-                           T#transaction{paid_for_username = TNewUser#user.username,
-                                         paid_for = TNewUser#user.internal_uid}
-              end,
-              RT = debt:add_transaction(UT, ReqByU),
-              transaction:add(RT, ReqByU)
-      end, Ts),
-
-    DeleteU(),
-    lager:info("Transferred debts from ~p to ~p~n", [TOldUser, TNewUser]),
-    {noreply, State};
 
 handle_cast({remove_feedback, Uuid}, State) ->
     FeedDB = ?FEEDBACK(State),

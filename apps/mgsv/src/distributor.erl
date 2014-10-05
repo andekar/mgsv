@@ -67,6 +67,8 @@ resource_exists(ReqData, Context) ->
             {true, ReqData, Context};
         {'POST', ["android_token"], https} ->
             {true, ReqData, Context};
+        {'DELETE', ["android_token", _Badge], https} ->
+            {true, ReqData, Context};
         {'DELETE', ["ios_token", _Badge], https} ->
             {true, ReqData, Context};
 
@@ -152,27 +154,24 @@ from_json(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}] = proplists:lookup_all(json, Context),
     [{userdata, Ud}] = proplists:lookup_all(userdata, Context),
-    Reply =
-        case Scheme of
-            http ->
-                "operation not allowed";
-
-            https -> error_logger:info_msg("~p ~p ~p", [Method, Url, Decoded]), %
-                     try
-                         {ok, Result} = mgsv_server:send_message({Method, Ud,
-                                                                  Url, Decoded, Scheme}),
-                         Result
-                     catch
-                         _:Error ->
-                             lager:alert("CRASH ~p~n~p", [Error, erlang:get_stacktrace()]),
-                             mochijson2:encode([[{error,request_failed}]])
-                     end;
-            _ -> mochijson2:encode([[{error, user_not_authenticated}]])
-        end,
-    error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
-    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
-    {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context}.
-
+    SReply = try
+                error_logger:info_msg("~p ~p ~p", [Method, Url, Decoded]), %
+                mgsv_server:send_message({Method, Ud,
+                                          Url, Decoded, Scheme})
+            catch
+                _:TheError ->
+                    lager:alert("CRASH ~p~n~p", [TheError, erlang:get_stacktrace()]),
+                    mochijson2:encode([[{error,request_failed}]])
+            end,
+    case SReply of
+        {ok, Reply} ->
+            error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
+            HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
+            {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context};
+        {nok, Error} ->
+            error_logger:info_msg("REPLY 400 error ~p",[Error]),
+            {{halt, 400}, ReqData, Context}
+    end.
 
 to_html(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
@@ -225,9 +224,9 @@ is_authorized(ReqData, Context) ->
                                            {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
             UD = #user_data{os = Os,
                             version = Version,
-                            expected_server_version = ExpectedProtocol
+                            protocol = ExpectedProtocol
                            },
-            lager:info("Got user-agent OS ~p Version ~p~n~p~n~n",[Os,Version, UserAgent]),
+            lager:info("Got user-agent OS ~p Version ~p Protocol ~p~n~p~n",[Os,Version,ExpectedProtocol, UserAgent]),
             case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
                 {"debug", UserId, _Token} ->
                     BinUserId = list_to_binary(UserId),
