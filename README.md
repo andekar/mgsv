@@ -50,22 +50,20 @@ mgsv
 [
    {
       "debt":{
-         "id":"03e40efd-ef93-4da6-90a8-47fccf2868ea",
+         "id":"76277994-fc3f-4d6e-8ef3-6a94321cb9a0",
          "uid1":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
-         "uid1_username":"andersk84@gmail.com",
-         "uid2":"51ef0a15-d71a-4683-acb8-6e2466f98d79",
-         "uid2_username":"102f0c18-d70a-434a-9e61-c4e7d100410e",
-         "amount":100,
-         "currency":"DKK",
+         "uid2":"8cd677d5-b0a3-4f9e-bf02-0bd3d47b0069",
+         "amount":2320.9629389298207,
+         "currency":"SEK",
          "edit_details":{
-            "created_at":1412502772067363,
+            "created_at":1412457221192685,
             "created_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
-            "last_change":1412502772067363,
+            "last_change":1412523623242310,
             "last_changed_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2"
          }
       }
-   }
-...]
+   },...
+]
 ```
 
 **URL:**  transactions/{id}
@@ -89,17 +87,16 @@ mgsv
 [
    {
       "transaction":{
-         "reason":"testreason",
+         "reason":"test",
          "amount":1128.642364393294,
-         "uid1":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
          "org_debt":{
             "currency":"CHF",
             "amount":150
          },
-         "timestamp" : 12346567,            // seconds since 1970
-         "uid2":"d58ddd1e-5323-4ad3-b47b-9c3249209987",
+         "paid_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
+         "paid_for":"8cd677d5-b0a3-4f9e-bf02-0bd3d47b0069",
          "currency":"SEK",
-         "echo_uuid":"4B932798-40B5-42BA-80C6-B04BFF9BD1CA"
+         "echo_uuid":"69CAFDBE-60E0-4AAA-8051-B06C10D711B5"
       }
    }, ...
 ]
@@ -110,24 +107,28 @@ mgsv
 [
    {
       "transaction":{
-         "uuid":"69cbbd45-3158-4794-ba84-1e4a71462bee",
-         "uid1":"andersk84@gmail.com",
-         "uid2":"ali.elshaia@gmail.com",
+         "transaction_id":"6ae01e69-85fe-4fc4-a7ca-9cd22c85ed76",
+         "paid_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
+         "paid_for":"8cd677d5-b0a3-4f9e-bf02-0bd3d47b0069",
          "amount":1128.642364393294,
-         "reason":"testreason",
-         "timestamp":12346567,
-         "server_timestamp":1412507465576025,
+         "reason":"test",
+         "timestamp":1412523623240014,
+         "server_timestamp":1412523623240014,
          "currency":"SEK",
-         "org_debt":{
-            "currency":"CHF",
-            "amount":150
+         "org_transaction":{
+            "amount":150,
+            "currency":"CHF"
          },
-         "echo_uuid":"4B932798-40B5-42BA-80C6-B04BFF9BD1CA",
+         "edit_details":{
+            "created_at":1412523623240072,
+            "created_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2",
+            "last_change":1412523623240072,
+            "last_changed_by":"890043b5-e69a-4af7-94a7-af9cac5a36d2"
+         },
+         "echo_uuid":"69CAFDBE-60E0-4AAA-8051-B06C10D711B5",
          "status":"ok"
       }
-   }
-]
-, ... // more transactions
+   }, ... // more transactions
 ]
 ```
 
@@ -140,30 +141,10 @@ mgsv
 [userid] - id of other party to find transactions between
 [num]  - number of transactions to return
 [from] - begin at another location in the sorted list of transactions
+
 **RESPONSE:**
 ######
-```json
-[
-   {
-      "transaction":{
-         "uuid":"69cbbd45-3158-4794-ba84-1e4a71462bee",
-         "uid1":"andersk84@gmail.com",
-         "uid2":"ali.elshaia@gmail.com",
-         "amount":1128.642364393294,
-         "reason":"testreason",
-         "timestamp":12346567,
-         "server_timestamp":1412507465576025,
-         "currency":"SEK",
-         "org_debt":{
-            "currency":"CHF",
-            "amount":150
-         }
-      }
-   }
-]
-, ... // more transactions
-]
-```
+same as when you post a transaction
 **NOTE** the list returned is sorted based on SERVER_TIMESTAMP
 
 **URL:**  users
@@ -199,7 +180,7 @@ mgsv
          "usertype":"local",
          "currency":"SEK",
          "echo_uuid":"E084016F-D827-4B02-8E1D-0A2C60C81E08",
-         "user":"testuser"
+         "displayname":"testuser"
       }
    }
 ]
@@ -209,11 +190,11 @@ OR
 [
    {
       "user":{
-         "usertype":"google", %% or facebook
+         "usertype":"gmail", %% or facebook
          "currency":"SEK",
          "echo_uuid":"2C60A8E0-BB28-4A77-B3E2-7EDC613124E9",
          "uid":"106778044490122886188", %% this is the google or facebook id
-         "user":"Jeena Paradies"
+         "displayname":"Simon unnamed"
       }
    }
 ]
@@ -249,8 +230,8 @@ OR
          "internal_uid":"f2ff3f5c-7208-4e8e-8f0b-f5f54ac7c895",
          "uid":"106778044490122886188", %% this become email if this user uses the app
          "username":"106778044490122886188",
-         "user_type":"google",
-         "displayname":"Jeena Paradies",
+         "user_type":"gmail",
+         "displayname":"Simon unnamed",
          "currency":"SEK",
          "user_edit_details":{
             "created_at":1412508430670655,
