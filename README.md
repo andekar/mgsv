@@ -154,7 +154,7 @@ same as when you post a transaction
 **DATA:**
 ######
 ```json
-[ {"user" : "anders"}
+[ {"displayname" : "anders"}
 | {"currency" : "SEK" | "NOK" | ...}
 ]
 **RETURN:**
@@ -206,8 +206,8 @@ OR
    {
       "user":{
          "internal_uid":"34d0e441-1067-41d8-b1d0-9a3f6f90e272", %the "most" unique
-         "uid":"9ab28f42-5ab4-4f6c-aab0-d748dd2578aa", %normally email or fb user
-         "username":"9ab28f42-5ab4-4f6c-aab0-d748dd2578aa", % normally google or fb uid
+         "uid":"9ab28f42-5ab4-4f6c-aab0-d748dd2578aa", %normally gmail uid or fb uid visible to others
+         "username":"9ab28f42-5ab4-4f6c-aab0-d748dd2578aa", % normally google email or fb private id
          "user_type":"local",
          "displayname":"testuser",
          "currency":"SEK",
@@ -228,8 +228,8 @@ OR
    {
       "user":{
          "internal_uid":"f2ff3f5c-7208-4e8e-8f0b-f5f54ac7c895",
-         "uid":"106778044490122886188", %% this become email if this user uses the app
-         "username":"106778044490122886188",
+         "uid":"106778044490122886188",
+         "username":"106778044490122886188", %% this become email if this user uses the app
          "user_type":"gmail",
          "displayname":"Simon unnamed",
          "currency":"SEK",
