@@ -3,7 +3,21 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create/6, add/6, add/2, create_mappingtable/0, create_usertable/0, get/1, delete/1,update/2, reconstruct/1, update_parts/2, to_proplist/2, count_by_usertype/1, update_find/1]).
+-export([create/6,
+         add/6,
+         add/2,
+         create_mappingtable/0,
+         create_usertable/0,
+         get/1,
+         delete/1,
+         update/2,
+         reconstruct/1,
+         update_parts/2,
+         to_proplist/2,
+         count_by_usertype/1,
+         update_find/1,
+         from_proplist/2
+        ]).
 
 -record(user_mapping,
         { uid :: binary(), %% id from google or facebook or internal if local
@@ -34,6 +48,21 @@ add(Uid, Username, DisplayName, UserType, Currency, Uid) ->
     add(User, User),
     User.
 
+add(User, #user_data{ user = no_such_user, %% adding self
+                      username = Username,
+                      id = Id
+                    }) ->
+    case User#user.username of
+        Username ->
+            ReqBU = #user{ uid = Id,
+                           username = Username
+                         },
+            add(User#user{ uid = Id }, ReqBU);
+        _ ->
+            illegal_aciton %% trying to add some one else
+    end;
+add(User, #user_data{ user = ReqBU}) ->
+    add(User, ReqBU);
 add(User, ReqBy = #user{}) ->
     case [users:get({username, User#user.username}),
           users:get({uid, User#user.uid})] of
@@ -42,7 +71,10 @@ add(User, ReqBy = #user{}) ->
             UserInfo = create_userinfo(User,ReqBy),
             mnesia:dirty_write(UserMapping),
             mnesia:dirty_write(UserInfo);
-        _ -> user_already_exist
+        [UUser = #user{},_] ->
+            UUser;
+        [_, UUser = #user{}] ->
+            UUser
     end.
 
 %%Todo what if not registered?!?
@@ -174,6 +206,8 @@ update_parts([], User) ->
     User;
 update_parts([{?USER, DisplayName}|Rest], User) ->
     update_parts(Rest, User#user{displayname = DisplayName});
+update_parts([{?DISPLAYNAME, DisplayName}|Rest], User) ->
+    update_parts(Rest, User#user{displayname = DisplayName});
 update_parts([{?CURRENCY, Currency}|Rest], User) ->
     update_parts(Rest, User#user{currency = Currency});
 update_parts([NotSupported|Rest], User) ->
@@ -209,6 +243,117 @@ to_proplist_old(User) ->
      {<<"usertype">>, User#user.user_type},
      {<<"currency">>, User#user.currency},
      {<<"server_timestamp">>, User#user.user_edit_details#edit_details.last_change}].
+
+from_proplist(List, Userdata) ->
+    Uuid = common:binary_uuid(),
+    User = #user{
+              uid = Uuid,
+              username = Uuid,
+              user_edit_details =
+                  common:mod_edit_details(
+                    #edit_details{},
+                    Userdata#user_data.user)
+             },
+    UUser = case Userdata#user_data.protocol of
+                "0.36" ->
+                    from_proplist36(User, List);
+                _ ->
+                    from_proplist_old(User#user{
+                                        user_type = ?LOCAL_USER,
+                                        currency  = ?SWEDISH_CRONA
+                                       }, List)
+            end,
+    TUser = case UUser of %% todo check if user
+                #user{ user_type = ?LOCAL_USER } ->
+                    UUser#user{ uid = Uuid,
+                                username = Uuid
+                              };
+                _ ->
+                    UUser
+            end,
+    validate_user(TUser).
+
+validate_user(User =
+                  #user{ username = Username,
+                         user_type = UserType,
+                         displayname = Displayname,
+                         currency = Currency
+                       }) ->
+    Errors = case Username of
+                 <<"">> ->
+                     [{error, empty_username}];
+                 undefined ->
+                     [{error, undefined_username}];
+                 _ -> []
+             end,
+    Errors1 = case UserType of
+                  ?GMAIL_USER ->
+                      Errors;
+                  ?FACEBOOK_USER ->
+                      Errors;
+                  ?LOCAL_USER ->
+                      Errors;
+                  _ ->
+                      [{error, unknown_user_type}|Errors]
+              end,
+    Errors2 = case Displayname of
+                  undefined ->
+                      [{error, unknown_displayname}|Errors1];
+                  <<"">> ->
+                      [{error, empty_displayname}|Errors1];
+                  _ ->
+                      Errors1
+              end,
+    Currencies = exchangerates_server:countries(),
+    Errors3 = case proplists:get_value(Currency, Currencies) of
+                  undefined ->
+                      [{error, unknown_currency}|Errors2];
+                  _ ->
+                      Errors2
+              end,
+    case Errors3 of
+        [] ->
+            User;
+        _ ->
+            Errors3
+    end;
+validate_user(Other) ->
+    [{error, Other}].
+
+
+from_proplist36(User, []) ->
+    User;
+from_proplist36(User, [{?UID, Uid}| Rest]) ->
+    from_proplist36(User#user{uid = ?UID_TO_LOWER(Uid),
+                              username = ?UID_TO_LOWER(Uid)}, Rest);
+from_proplist36(User, [{?DISPLAYNAME, Displayname}| Rest]) ->
+    from_proplist36(User#user{displayname = Displayname}, Rest);
+from_proplist36(User, [{?USER_TYPE, UserType}| Rest]) ->
+    from_proplist36(User#user{user_type = UserType}, Rest);
+from_proplist36(User, [{?CURRENCY,Currency}| Rest]) ->
+    from_proplist36(User#user{currency = Currency}, Rest);
+from_proplist36(T, [{?ECHO_UUID, _}|Rest]) ->
+    from_proplist36(T,Rest);
+from_proplist36(_User, [Illegal| _Rest]) ->
+    lager:info("unsupported transaction variable ~p~n",[Illegal]),
+    unsupported_variable.
+
+from_proplist_old(User, []) ->
+    User;
+from_proplist_old(User, [{?UID,Uid}|Rest]) ->
+    from_proplist_old(User#user{ uid = ?UID_TO_LOWER(Uid),
+                                 username = ?UID_TO_LOWER(Uid)}, Rest);
+from_proplist_old(User, [{?CURRENCY, Currency} | Rest]) ->
+    from_proplist_old(User#user{ currency = Currency }, Rest);
+from_proplist_old(User, [{?USER_TYPE,Usertype}|Rest]) ->
+    from_proplist_old(User#user{ user_type = Usertype }, Rest);
+from_proplist_old(User, [{?ECHO_UUID, _}|Rest]) ->
+    from_proplist_old(User#user{}, Rest);
+from_proplist_old(User, [{?USER,Displayname}|Rest]) ->
+    from_proplist_old(User#user{ displayname = Displayname }, Rest);
+from_proplist_old(_User, [Illegal| _Rest]) ->
+    lager:info("unsupported transaction variable ~p~n",[Illegal]),
+    unsupported_variable.
 
 %% from_proplist(PropList) ->
 %%     Uid = proplists:get_value(<<"uid">>, PropList),

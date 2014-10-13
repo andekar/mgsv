@@ -2,6 +2,8 @@
 -define(UID, <<"uid">>).
 -define(UID(Uid), {?UID, Uid}).
 
+-define(DISPLAYNAME, <<"displayname">>).
+
 -define(NEW_UID, <<"new_uid">>).
 
 -define(OLD_UID, <<"old_uid">>).
@@ -30,6 +32,12 @@
 %% User 1 id
 -define(UID1, <<"uid1">>).
 -define(UID1(Uid1), {?UID1, Uid1}).
+
+-define(PAID_BY, <<"paid_by">>).
+-define(PAID_BY(Uid), {?PAID_BY, Uid}).
+
+-define(PAID_FOR, <<"paid_for">>).
+-define(PAID_FOR(Uid), {?PAID_FOR, Uid}).
 
 %% User 2 id
 -define(UID2, <<"uid2">>).

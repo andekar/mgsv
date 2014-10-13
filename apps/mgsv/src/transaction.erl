@@ -5,7 +5,7 @@
 
 
 -export([create_transactiontable/0, to_proplist/2, add/2, get/1, reconstruct/1,
-        from_proplist/1, delete/1]).
+        from_proplist/2, delete/1]).
 
 create_transactiontable() ->
     Res = mnesia:create_table( transaction,
@@ -20,8 +20,8 @@ create_transactiontable() ->
 add(T = #transaction{}, ReqBy = #user{}) ->
     UT = T#transaction{ edit_details = common:mod_edit_details(T#transaction.edit_details, ReqBy)},
     mnesia:dirty_write(UT);
-add(T, ReqBy = #user{}) when is_list(T)->
-    add(from_proplist(T), ReqBy);
+%add(T, ReqBy = #user{}) when is_list(T)->
+%    add(from_proplist(T), ReqBy);
 add(_, no_such_user) ->
     lager:info("NOSUCHUSERERROR in add~n",[]),
     nok.
@@ -63,22 +63,28 @@ to_proplist_36(User) ->
     DFields = record_info(fields, edit_details),
     OFields = record_info(fields, org_transaction),
     [_|Vals] = tuple_to_list(User),
-    lists:zipwith(fun (edit_details, DY) ->
-                          [_|DVals] = tuple_to_list(DY),
-                          {<<"edit_details">>,
-                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
-                                                {atom_to_binary(A, utf8),B} end,
-                                        DFields, DVals))};
-                      (org_transaction, DY) ->
-                          [_|DVals] = tuple_to_list(DY),
-                          {<<"org_transaction">>,
-                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
-                                                {atom_to_binary(A, utf8),B} end,
-                                        OFields, DVals))};
-                      (X, Y) ->
-                          {atom_to_binary(X, utf8),Y} end,
-                  Fields,
-                  Vals).
+    Ret =
+        lists:zipwith(fun (edit_details, DY) ->
+                              [_|DVals] = tuple_to_list(DY),
+                              {<<"edit_details">>,
+                               ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                                 {atom_to_binary(A, utf8),B} end,
+                                                         DFields, DVals))};
+                          (org_transaction, DY) ->
+                              [_|DVals] = tuple_to_list(DY),
+                              {<<"org_transaction">>,
+                               ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                                 {atom_to_binary(A, utf8),B} end,
+                                                         OFields, DVals))};
+                          (X, Y) ->
+                              {atom_to_binary(X, utf8),Y} end,
+                      Fields,
+                      Vals),
+    lists:foldl(fun(ToRemove, State) ->
+                        proplists:delete(ToRemove, State) end,
+                Ret, [<<"paid_by_username">>,
+                      <<"paid_for_username">>]
+               ).
 
 to_proplist_old(Transaction) ->
     [{?UUID, Transaction#transaction.transaction_id},
@@ -100,7 +106,74 @@ org_transaction_to_proplist(OrgDebt) ->
      [{?CURRENCY, OrgDebt#org_transaction.currency},
       {?AMOUNT, OrgDebt#org_transaction.amount}]}].
 
-from_proplist(List) ->
+from_proplist(List,Userdata) ->
+    case Userdata#user_data.protocol of
+        "0.36" ->
+            from_proplist36(List, Userdata#user_data.user);
+        _ ->
+            from_proplist_old(List, Userdata#user_data.user)
+    end.
+
+from_proplist36(List, #user{} = ReqBy) ->
+    check_for_missing_fields(
+      from_proplist36(#transaction{
+                         edit_details =
+                             common:mod_edit_details(
+                               #edit_details{},
+                               ReqBy)
+                        }, List));
+
+from_proplist36(Transaction, []) ->
+    OrgTrans = Transaction#transaction.org_transaction,
+    case OrgTrans#org_transaction.amount of
+        undefined ->
+            Amount = Transaction#transaction.amount,
+            Currency = Transaction#transaction.currency,
+            UOrgTrans = OrgTrans#org_transaction{amount = Amount,
+                                                 currency = Currency},
+            Transaction#transaction{org_transaction = UOrgTrans};
+        _ ->
+            Transaction
+    end;
+from_proplist36(T, [{?PAID_BY, Uid1}|Rest]) ->
+    User1 = users:get(Uid1),
+    case User1 of
+        no_such_user -> no_such_user;
+        _ ->
+            from_proplist36(T#transaction{paid_by = User1#user.internal_uid,
+                                          paid_by_username = User1#user.username},
+                          Rest)
+    end;
+from_proplist36(T, [{?PAID_FOR, Uid2}|Rest]) ->
+    User2 = users:get(Uid2),
+    case User2 of
+        no_such_user -> no_such_user;
+        _ ->
+            from_proplist36(T#transaction{paid_for = User2#user.internal_uid,
+                                          paid_for_username = User2#user.username},
+                          Rest)
+    end;
+from_proplist36(T, [{?AMOUNT, Amount}|Rest]) ->
+    from_proplist36(T#transaction{amount = Amount}, Rest);
+from_proplist36(T, [{?REASON, Reason}|Rest]) ->
+    from_proplist36(T#transaction{reason = Reason}, Rest);
+from_proplist36(T, [{?TIMESTAMP, Timestamp}|Rest]) ->
+    from_proplist36(T#transaction{timestamp = Timestamp},Rest);
+from_proplist36(T, [{?CURRENCY, Currency}|Rest]) ->
+    from_proplist36(T#transaction{currency = Currency},Rest);
+from_proplist36(T, [{?UUID, UUid}|Rest]) ->
+    from_proplist36(T#transaction{transaction_id = UUid},Rest);
+from_proplist36(T, [{?SERVER_TIMESTAMP, ServerTimestamp}|Rest]) ->
+    from_proplist36(T#transaction{server_timestamp = ServerTimestamp}, Rest);
+from_proplist36(T, [{?ORG_DEBT, OrgDebt}|Rest]) ->
+    from_proplist36(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
+from_proplist36(T, [{?ECHO_UUID, _}|Rest]) ->
+    from_proplist36(T,Rest);
+from_proplist36(_T, [Any|_Rest]) ->
+    lager:info("unsupported transaction variable ~p~n",[Any]),
+    unsupported_variable.
+
+from_proplist_old(List, #user{} = ReqBy) ->
     %% This should be removed in later versions
     UList = case {proplists:get_value(?UID1, List),
                   proplists:get_value(?USER1, List)} of
@@ -125,9 +198,13 @@ from_proplist(List) ->
                 _ -> UList
             end,
     check_for_missing_fields(
-      from_proplist(#transaction{}, UList2)).
+      from_proplist_old(#transaction{
+                           edit_details =
+                               common:mod_edit_details(
+                                 #edit_details{},
+                                 ReqBy)}, UList2));
 
-from_proplist(Transaction, []) ->
+from_proplist_old(Transaction, []) ->
     OrgTrans = Transaction#transaction.org_transaction,
     case OrgTrans#org_transaction.amount of
         undefined ->
@@ -139,41 +216,41 @@ from_proplist(Transaction, []) ->
         _ ->
             Transaction
     end;
-from_proplist(T, [{?UID1, Uid1}|Rest]) ->
+from_proplist_old(T, [{?UID1, Uid1}|Rest]) ->
     User1 = users:get(Uid1),
     case User1 of
         no_such_user -> no_such_user;
         _ ->
-            from_proplist(T#transaction{paid_by = User1#user.internal_uid,
+            from_proplist_old(T#transaction{paid_by = User1#user.internal_uid,
                                         paid_by_username = User1#user.username},
                           Rest)
     end;
-from_proplist(T, [{?UID2, Uid2}|Rest]) ->
+from_proplist_old(T, [{?UID2, Uid2}|Rest]) ->
     User2 = users:get(Uid2),
     case User2 of
         no_such_user -> no_such_user;
         _ ->
-            from_proplist(T#transaction{paid_for = User2#user.internal_uid,
+            from_proplist_old(T#transaction{paid_for = User2#user.internal_uid,
                                         paid_for_username = User2#user.username},
                           Rest)
     end;
-from_proplist(T, [{?AMOUNT, Amount}|Rest]) ->
-    from_proplist(T#transaction{amount = Amount}, Rest);
-from_proplist(T, [{?REASON, Reason}|Rest]) ->
-    from_proplist(T#transaction{reason = Reason}, Rest);
-from_proplist(T, [{?TIMESTAMP, Timestamp}|Rest]) ->
-    from_proplist(T#transaction{timestamp = Timestamp},Rest);
-from_proplist(T, [{?CURRENCY, Currency}|Rest]) ->
-    from_proplist(T#transaction{currency = Currency},Rest);
-from_proplist(T, [{?UUID, UUid}|Rest]) ->
-    from_proplist(T#transaction{transaction_id = UUid},Rest);
-from_proplist(T, [{?SERVER_TIMESTAMP, ServerTimestamp}|Rest]) ->
-    from_proplist(T#transaction{server_timestamp = ServerTimestamp}, Rest);
-from_proplist(T, [{?ORG_DEBT, OrgDebt}|Rest]) ->
-    from_proplist(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
-from_proplist(T, [Any|Rest]) ->
+from_proplist_old(T, [{?AMOUNT, Amount}|Rest]) ->
+    from_proplist_old(T#transaction{amount = Amount}, Rest);
+from_proplist_old(T, [{?REASON, Reason}|Rest]) ->
+    from_proplist_old(T#transaction{reason = Reason}, Rest);
+from_proplist_old(T, [{?TIMESTAMP, Timestamp}|Rest]) ->
+    from_proplist_old(T#transaction{timestamp = Timestamp},Rest);
+from_proplist_old(T, [{?CURRENCY, Currency}|Rest]) ->
+    from_proplist_old(T#transaction{currency = Currency},Rest);
+from_proplist_old(T, [{?UUID, UUid}|Rest]) ->
+    from_proplist_old(T#transaction{transaction_id = UUid},Rest);
+from_proplist_old(T, [{?SERVER_TIMESTAMP, ServerTimestamp}|Rest]) ->
+    from_proplist_old(T#transaction{server_timestamp = ServerTimestamp}, Rest);
+from_proplist_old(T, [{?ORG_DEBT, OrgDebt}|Rest]) ->
+    from_proplist_old(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
+from_proplist_old(T, [Any|Rest]) ->
     lager:info("unsupported transaction variable ~p~n",[Any]),
-    from_proplist(T,Rest).
+    from_proplist_old(T,Rest).
 
 org_transaction_from_proplist(O, []) ->
     O;
@@ -211,7 +288,7 @@ check_for_missing_fields(V) ->
 reconstruct(DBName) ->
     dets:traverse(DBName,
                   fun({_DebtId, PropList}) ->
-                          case from_proplist(PropList) of
+                          case from_proplist_old(PropList, #user{}) of
                               #transaction{} = T ->
                                   ReqBy = users:get({internal_uid, T#transaction.paid_by}),
                                   ok = case ReqBy of

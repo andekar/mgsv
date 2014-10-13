@@ -88,16 +88,21 @@ to_proplist_36(User) ->
     Fields = record_info(fields, debt),
     DFields = record_info(fields, edit_details),
     [_|Vals] = tuple_to_list(User),
-    lists:zipwith(fun (edit_details, DY) ->
-                          [_|DVals] = tuple_to_list(DY),
-                          {<<"edit_details">>,
-                          ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
-                                                {atom_to_binary(A, utf8),B} end,
-                                        DFields, DVals))};
-                      (X, Y) ->
-                          {atom_to_binary(X, utf8),Y} end,
-                  Fields,
-                  Vals).
+    Ret = lists:zipwith(fun (edit_details, DY) ->
+                                [_|DVals] = tuple_to_list(DY),
+                                {<<"edit_details">>,
+                                 ?JSONSTRUCT(lists:zipwith(fun(A,B) ->
+                                                                   {atom_to_binary(A, utf8),B} end,
+                                                           DFields, DVals))};
+                            (X, Y) ->
+                                {atom_to_binary(X, utf8),Y} end,
+                        Fields,
+                        Vals),
+    lists:foldl(fun(ToRemove, State) ->
+                        proplists:delete(ToRemove, State) end,
+                Ret, [<<"uid1_username">>,
+                      <<"uid2_username">>]
+               ).
 
 to_proplist_old(Debt) ->
     [{?UID1, Debt#debt.uid1_username},

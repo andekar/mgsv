@@ -7,9 +7,9 @@
 
 -record(user,
         { internal_uid = common:binary_uuid() :: binary(),
-          uid :: binary(),
-          username :: binary(),
-          user_type :: binary(),
+          uid :: binary(), %% the unique id from google or facebook
+          username :: binary(), %% the email or facebook id
+          user_type :: binary(), %% local, google, facebook
           displayname :: binary(),
           currency :: binary(),
           user_edit_details :: #edit_details{}

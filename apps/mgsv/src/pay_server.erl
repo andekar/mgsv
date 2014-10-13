@@ -168,8 +168,9 @@ handle_call({get_usernames, Uids, Userdata}, _From, State) ->
 handle_call({add, Ud, Struct}, _From, State) ->
     EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
     ReqBy = Ud#user_data.user,
-    Transaction = transaction:from_proplist(Struct),
+    Transaction = transaction:from_proplist(Struct, Ud),
 
+    lager:info("transaction ~p~n",[Transaction]),
     User1 = users:get({internal_uid, Transaction#transaction.paid_by}),
     User2 = users:get({internal_uid, Transaction#transaction.paid_for}),
     Username1 = User1#user.username,
@@ -233,32 +234,18 @@ handle_call({delete_debt, Userdata, Uuid}, _From, State) ->
 
 handle_call({register, UserInfo, Ud}, _From, State) ->
     EchoUuid = proplists:lookup_all(?ECHO_UUID, UserInfo),
-    UidLower  = verify_uid(uid_to_lower(uid(UserInfo)), []),
-    RBy = case Ud#user_data.user of
-              no_such_user -> UidLower;
-              Us -> Us
-          end,
-    RepUserType = case string:rstr(binary_to_list(UidLower), "@") of
-                      0 -> ?LOCAL_USER;
-                      _ -> ?GMAIL_USER
-                  end,
-    UserType = proplists:get_value(?USER_TYPE, UserInfo, RepUserType), %%
-    Currency = proplists:get_value(?CURRENCY, UserInfo, ?SWEDISH_CRONA),
-    UserName = username(UserInfo),
-    case UserName of
-        UserName when is_binary(UserName) ->
-            RetUsr = case users:get(UidLower) of
-                         %% make sure that we never autogenerate username
-                         no_such_user ->
-                             User = users:add(UidLower,UidLower, UserName, UserType, Currency, RBy),
-                             lager:info("Added user with uid ~p and username ~p UserType ~p currency ~p",
-                                        [UidLower, UserName, UserType, Currency]),
-                             User;
-                         U  -> lager:info("User already exist"),
-                               U
-                     end,
-            {reply, users:to_proplist(RetUsr, Ud) ++ EchoUuid,  State};
-        _ -> {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid, State}
+    case users:from_proplist(UserInfo, Ud) of
+        RetUsr = #user{} ->
+            case users:add(RetUsr, Ud) of
+                user_already_exist ->
+                    {reply, [{error, user_exist}] ++ EchoUuid, State};
+                U ->
+                    lager:info("Added user ~p ",[RetUsr]),
+                    {reply, users:to_proplist(U, Ud) ++ EchoUuid,  State}
+            end;
+        E ->
+            lager:error("Added user error ~p ",[E]),
+            {reply, [{<<"error">>, <<"unexpected_format">>}] ++ EchoUuid ++ E, State}
     end;
 
 % The user transferring debts must be the creator (ReqBy)
@@ -500,15 +487,6 @@ verify_uid(undefined, _Db) ->
 verify_uid(User, _Db) ->
     User.
 
-uid_to_lower(undefined) ->
-    lager:info("undefined uui"),
-    undefined;
-uid_to_lower(BinString) when is_binary(BinString) ->
-    list_to_binary(string:to_lower(binary_to_list(BinString)));
-uid_to_lower(Arg) ->
-    lager:error("not valid String ~p", [Arg]).
-
-
 user_exist(Uid, _State) ->
     UidLower  = ?UID_TO_LOWER(Uid),
     case users:get(UidLower) of
@@ -519,17 +497,11 @@ user_exist(Uid, _State) ->
 amount(Arg) ->
     props(?AMOUNT, Arg).
 
-uid(Arg) ->
-    props(?UID, Arg).
-
 currency(Arg) ->
     props(?CURRENCY, Arg).
 
 server_timestamp(Arg) ->
     props(?SERVER_TIMESTAMP, Arg).
-
-username(Arg) ->
-    props(?USER, Arg).
 
 props(Name, Arg) when is_list(Arg) ->
     proplists:get_value(Name, Arg);
@@ -537,7 +509,6 @@ props(Name, {Name, Val}) ->
     Val;
 props(Name, Arg) ->
     {Name, Arg}.
-
 
 users(Type) ->
     users:count_by_usertype(Type).
