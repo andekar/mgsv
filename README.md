@@ -371,12 +371,12 @@ same as when you create a user
 ######
 ```json
 [ {"transaction" :
-            { "user1"     : "anders"            // This one is optional if uid1 is given
-            , "uid1"      : "anders@gmail.com"  // This one is optional if user1 is given
+            { "user1"     : "anders"            // This one should only be given if uid1 uid1 is missing
+            , "uid1"      : "anders@gmail.com"  // This one should only be given if user1 is not
             , "reason"    : "cinema ticket Riddick"
             , "amount"    : 100
-            , "user2"     : "petter"            // This one is optional if uid2 is given
-            , "uid2"      : "petter@gmail.com"  // This one is optional if user2 is given
+            , "user2"     : "petter"            // same as user1
+            , "uid2"      : "petter@gmail.com"  // same as uid1
             , "currency"  : "SEK" | "NOK" | ...
             , "timestamp" : 12346567            // seconds since 1970
             , "echo_uuid" : "324237483"         // any client created guid
