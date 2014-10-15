@@ -70,7 +70,8 @@ add(User, ReqBy = #user{}) ->
             UserMapping = create_mapping(User, ReqBy),
             UserInfo = create_userinfo(User,ReqBy),
             mnesia:dirty_write(UserMapping),
-            mnesia:dirty_write(UserInfo);
+            mnesia:dirty_write(UserInfo),
+            users:get({internal_uid, UserMapping#user_mapping.internal_uid});
         [UUser = #user{},_] ->
             UUser;
         [_, UUser = #user{}] ->

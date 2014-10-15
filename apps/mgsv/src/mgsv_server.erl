@@ -30,9 +30,6 @@ handle_call({'DELETE', Ud, [Path, StrId], https}, _From, State) ->
         "transactions" ->
             pay_server:delete_debt({delete_debt, Userdata, Id}),
             {reply, ok, State};
-        "feedback" ->
-            pay_server:remove_feedback(Id),
-            {reply, ok, State};
         "ios_token" ->
             pay_push_notification:clear_counter(Userdata#user_data.username),
             {reply, ok, State};
@@ -87,10 +84,6 @@ handle_call({'POST', Ud, Path, Props, https}, _From, State) ->
                                       ?JSONSTRUCT([{?TRANSACTION,Tmp}])
                               end, Transactions),
             {reply, {ok, mochijson2:encode(Reply)}, State};
-        ["feedback"] ->
-            [{?FEEDBACK, Feedback}] = proplists:lookup_all(?FEEDBACK, Props),
-            {ok, Result} = pay_server:add_feedback(Userdata#user_data.username, Feedback),
-            {reply, {ok, mochijson2:encode([{?FEEDBACK, Result}])}, State};
         ["android_token"] ->
             [{_,AndroidToken}] = proplists:lookup_all(?ANDROID_TOKEN, Props),
             pay_push_notification:add_user_android(Userdata#user_data.username, AndroidToken),
@@ -179,13 +172,6 @@ handle_call({'GET', Ud, Path, https}, _From, State) ->
             Return = lists:map(fun(List) ->
                                        ?JSONSTRUCT([?DEBT(List)]) end,
                                pay_server:get_user_debt(Userdata)),
-            Return2 = mochijson2:encode(Return),
-            {reply, {ok, Return2}, State};
-        ["feedback"] ->
-            Res = pay_server:get_feedback(), %% TODO maybe restrict to some users
-            Return = lists:map( fun(List) ->
-                                        ?JSONSTRUCT([{?FEEDBACK, List}]) end,
-                                Res),
             Return2 = mochijson2:encode(Return),
             {reply, {ok, Return2}, State};
         _ -> {reply, {ok, <<"ok">>}, State}

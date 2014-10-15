@@ -46,6 +46,8 @@ print_users() ->
 add_user_ios(Uuid, DevId) ->
     gen_server:cast(?MODULE, {add_user_ios, Uuid, DevId}).
 
+add_user_android(Uuid, DevId) when is_list(DevId) ->
+    add_user_android(Uuid,list_to_binary(DevId));
 add_user_android(Uuid, DevId) ->
     gen_server:cast(?MODULE, {add_user_android, Uuid, DevId}).
 
@@ -138,7 +140,12 @@ handle_cast({notify_user, Uuid, Message}, #state{ios = IOS,
         Any2 when is_list(Any2) ->
             lists:map(fun({_Uuid, DevTok}) ->
                               lager:info("devicetoken ~p message ~p Uuid ~p", [DevTok, AndroidMessage, Uuid]),
-                              gcm:push(android, [DevTok], AndroidMessage)
+                              DTok = case is_list(DevTok) of
+                                         true ->
+                                             list_to_binary(DevTok);
+                                         _ -> DevTok
+                                     end,
+                              gcm:push(android, [DTok], AndroidMessage)
                       end, Any2);
         _ -> ok
 

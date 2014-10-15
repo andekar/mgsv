@@ -56,13 +56,6 @@ resource_exists(ReqData, Context) ->
         {'GET', ["rate", _CountryCode], https} ->
             {true, ReqData, Context};
 
-        {'DELETE', ["feedback",_More], https} ->
-            {true, ReqData, Context};
-        {'POST', ["feedback"], https} ->
-            {true, ReqData, Context};
-        {'GET', ["feedback"], https} ->
-            {true, ReqData, Context};
-
         {'POST', ["ios_token"], https} ->
             {true, ReqData, Context};
         {'POST', ["android_token"], https} ->

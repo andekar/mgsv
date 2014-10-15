@@ -523,58 +523,6 @@ same as when you create a user
 [{"error" : "request_failed"}]
 ```
 
-**URL:**  feedback/{id}
-##
-**METHOD** DELETE
-######
-**DATA:** {id} of feedback to remove
-######
-**RETURN:**
-######
-204 if successful
-500 if not
-
-**URL:**  feedback
-##
-**METHOD** POST
-######
-**DATA:**
-######
-```json
-[ {"feedback" : "whatever"}
-]
-```
-**RETURN:**
-######
-```json
-{ "feedback" :
-  { "uid"        : "b6ac0146-9d46-4277-a4fa-7bc8fd320b60"
-  , "request_by" : "anders@gmail.com"
-  , "feedback"   : "whatever"
-  , "server_timestamp":1381214519568941 }
-}
-```
-**or**
-```json
-[{"error" : "request_failed"}]
-```
-
-**URL:**  feedback
-##
-**METHOD** GET
-######
-**RETURN:**
-######
-```json
-[{ "feedback" :
-  { "uid"        : "b6ac0146-9d46-4277-a4fa-7bc8fd320b60"
-  , "request_by" : "anders@gmail.com"
-  , "feedback"   : "whatever"
-  , "server_timestamp":1381214519568941 }
- }, ...
-]
-```
-
 **URL:**  countries
 ##
 **METHOD** GET
