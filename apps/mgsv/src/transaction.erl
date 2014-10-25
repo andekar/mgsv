@@ -248,6 +248,8 @@ from_proplist_old(T, [{?SERVER_TIMESTAMP, ServerTimestamp}|Rest]) ->
     from_proplist_old(T#transaction{server_timestamp = ServerTimestamp}, Rest);
 from_proplist_old(T, [{?ORG_DEBT, OrgDebt}|Rest]) ->
     from_proplist_old(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
+from_proplist_old(T, [{?ECHO_UUID, _}|Rest]) ->
+    from_proplist_old(T, Rest);
 from_proplist_old(T, [Any|Rest]) ->
     lager:info("unsupported transaction variable ~p~n",[Any]),
     from_proplist_old(T,Rest).
@@ -258,8 +260,6 @@ org_transaction_from_proplist(O, [{?CURRENCY, Currency}|Rest]) ->
     org_transaction_from_proplist(O#org_transaction{currency = Currency}, Rest);
 org_transaction_from_proplist(O, [{?AMOUNT, Amount}|Rest]) ->
     org_transaction_from_proplist(O#org_transaction{ amount = Amount}, Rest);
-org_transaction_from_proplist(O, [{?ECHO_UUID, _}|Rest]) ->
-    org_transaction_from_proplist(O, Rest);
 org_transaction_from_proplist(T, [Any|Rest]) ->
     lager:info("unsupported transaction.org_transaction variable ~p~n",[Any]),
     org_transaction_from_proplist(T,Rest).

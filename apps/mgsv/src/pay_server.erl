@@ -22,9 +22,6 @@
          , get_usernames/2
          , change_userinfo/2
          , remove_user_debt/2
-         , add_feedback/2
-         , get_feedback/0
-         , remove_feedback/1
           %% debug functions
          , d_gmail_users/0
          , d_facebook_users/0
@@ -40,8 +37,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    {_,E} = db_w:open_file("../../debt_feedback.dets",[{type, bag}]),
-    {ok, [{?FEEDBACK, E}]}.
+    {ok, []}.
 
 register_user(UserInfo, Userdata) ->
     gen_server:call(?MODULE, {register, UserInfo, Userdata}).
@@ -73,15 +69,6 @@ transfer_debts(OldUser, NewUser, ReqBy) ->
 remove_user_debt(Uuid, Userdata) ->
     gen_server:cast(?MODULE,{remove_user_debt, Uuid, Userdata}).
 
-add_feedback(ReqBy, Feedback) ->
-    gen_server:call(?MODULE, {add_feedback, ReqBy, Feedback}).
-
-get_feedback() ->
-    gen_server:call(?MODULE, {get_feedback}).
-
-remove_feedback(Uuid) ->
-    gen_server:cast(?MODULE, {remove_feedback, Uuid}).
-
 %%DEBUG
 d_gmail_users() ->
     gen_server:call(?MODULE, d_gmail_users).
@@ -102,24 +89,6 @@ handle_call(d_facebook_users, _From, State) ->
 
 handle_call(d_local_users, _From, State) ->
     {reply, users(?LOCAL_USER), State};
-
-handle_call({get_feedback}, _From, State) ->
-    Feedback = ?FEEDBACK(State),
-    FeedbackList = db_w:foldl(fun({_Uuid, PropList}, Acc) ->
-                                      [PropList | Acc] end, [], Feedback),
-    {reply, FeedbackList, State};
-
-handle_call({add_feedback, ReqBy, Feedback}, _From, State) ->
-    FeedDB = ?FEEDBACK(State),
-    Uid = binary_uuid(),
-    FB = [ {?UID, Uid}
-         , ?REQUEST_BY(ReqBy)
-         , {?FEEDBACK, Feedback}
-         , server_timestamp(get_timestamp())
-         ],
-    db_w:insert(FeedDB, { Uid
-                        , FB}),
-    {reply, {ok, FB}, State};
 
 %%TODO fix transaction
 handle_call({change_userinfo, Ud, UserInfo}, _From, State) ->
@@ -190,9 +159,12 @@ handle_call({add, Ud, Struct}, _From, State) ->
                            lager:info("Inserting transaction: ~p", [UT]),
                            Reason = UT#transaction.reason,
                            Message = list_to_binary(
-                                       "A transaction was added with reason \""
+                                       "\""
                                        ++ binary_to_list(Reason)
-                                       ++ "\" the transaction was added by "
+                                       ++ "\" "
+                                       ++ lists:flatten(io_lib:format("~p ",[UT#transaction.amount]))
+                                       ++ binary_to_list(UT#transaction.currency)
+                                       ++ " - "
                                        ++ binary_to_list(ReqBy#user.displayname)),
                            case ReqBy of %% TODO change this?
                                User1 -> pay_push_notification:notify_user(Username2, Message);
@@ -240,7 +212,7 @@ handle_call({register, UserInfo, Ud}, _From, State) ->
                 user_already_exist ->
                     {reply, [{error, user_exist}] ++ EchoUuid, State};
                 U ->
-                    lager:info("Added user ~p ",[RetUsr]),
+                    lager:info("Added user ~p ",[U]),
                     {reply, users:to_proplist(U, Ud) ++ EchoUuid,  State}
             end;
         E ->
@@ -388,12 +360,6 @@ handle_cast({remove_user_debt, TUuid, Userdata}, State) ->
     DeleteU(),
     {noreply, State};
 
-
-handle_cast({remove_feedback, Uuid}, State) ->
-    FeedDB = ?FEEDBACK(State),
-    db_w:delete(FeedDB, Uuid),
-    {noreply, State};
-
 handle_cast(Msg, State) ->
     lager:alert("Handle unknown cast ~p", [Msg]),
     {noreply, State}.
@@ -431,9 +397,9 @@ code_change(OldVsn, State, "0.3.6") ->
     TransactionsDb = ?DEBT_TRANSACTIONS(State),
     transaction:reconstruct(TransactionsDb),
     db_w:close(TransactionsDb),
-
+    db_w:close(?FEEDBACK(State)),
     application:set_env(webmachine, server_name, "PayApp/0.3.6"),
-    {ok, [{?FEEDBACK, ?FEEDBACK(State)}]};
+    {ok, []};
 
 code_change(OldVsn, State, Extra) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
@@ -475,10 +441,6 @@ uuid_to_binary(Uuid) ->
 binary_uuid() ->
     ossp_uuid:make(v4, text).
 
-get_timestamp() ->
-    {Mega, Seconds, Milli} = erlang:now(),
-    Mega * 1000000000000 + Seconds * 1000000 + Milli.
-
 % we might need to create a valid uid here,
 % or if the uid already exist then we are fine
 % or if the uid contains @
@@ -499,9 +461,6 @@ amount(Arg) ->
 
 currency(Arg) ->
     props(?CURRENCY, Arg).
-
-server_timestamp(Arg) ->
-    props(?SERVER_TIMESTAMP, Arg).
 
 props(Name, Arg) when is_list(Arg) ->
     proplists:get_value(Name, Arg);
