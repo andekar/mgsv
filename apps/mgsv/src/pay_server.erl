@@ -26,12 +26,21 @@
          , d_gmail_users/0
          , d_facebook_users/0
          , d_local_users/0
+
+        , export_fb_uids/0
         ]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, uuid_to_binary/1]).
 
 -export([currency_and_amount/3]).
+
+export_fb_uids() ->
+    FBUsers = users:users_by_type(?FACEBOOK_USER),
+    lists:map(fun(#user{uid=UID,
+                       username=Username}) ->
+                      {UID,Username} end,
+                      FBUsers).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -378,6 +387,7 @@ code_change(OldVsn, State, "0.3.6") ->
     mnesia:create_schema([node()]),
     mnesia:start(),
     lager:info("MNesia started, trying to create dbs",[]),
+    spawn_link(fun() ->
     users:create_mappingtable(),
     users:create_usertable(),
     lager:info("Trying to reconstruct users",[]),
@@ -387,16 +397,24 @@ code_change(OldVsn, State, "0.3.6") ->
     db_w:close(Users),
 
     Debts = ?DEBTS(State),
+%    Receiver = self(),
+
     lager:info("trying to reconstruct debts"),
     debt:create_debttable(),
     debt:reconstruct(Debts),
     db_w:close(Debts),
+%                       Receiver ! ok
+%               end),
 
+%    spawn_link(fun() ->
     lager:info("trying to reconstruct transactions"),
     transaction:create_transactiontable(),
     TransactionsDb = ?DEBT_TRANSACTIONS(State),
     transaction:reconstruct(TransactionsDb),
-    db_w:close(TransactionsDb),
+    db_w:close(TransactionsDb)
+%                           Receiver ! ok
+               end),
+
     db_w:close(?FEEDBACK(State)),
     application:set_env(webmachine, server_name, "PayApp/0.3.6"),
     {ok, []};

@@ -97,7 +97,6 @@ handle_call({'POST', Ud, Path, Props, https}, _From, State) ->
 
 %return res
 handle_call({'GET', Ud, Path, https}, _From, State) ->
-    Userdata = users:update_find(Ud),
     case Path of
         ["countries"] ->
             {reply, {ok, mochijson2:encode(exchangerates_server:countries())}, State};
@@ -109,7 +108,7 @@ handle_call({'GET', Ud, Path, https}, _From, State) ->
             {reply, {ok, mochijson2:encode([exchangerates_server:rate(list_to_binary(CountryCode))])}, State};
         ["users"|Uids] ->
             RealUids = lists:map(fun(Val) -> {?UID, ?UID_TO_LOWER(list_to_binary(Val))} end, Uids),
-            Struct = pay_server:get_usernames(RealUids, Userdata),
+            Struct = pay_server:get_usernames(RealUids, Ud),
             Ret = lists:map(fun(List) ->
                                     case List of
                                         [{error, E}] -> ?JSONSTRUCT([{error, E}]);
@@ -119,62 +118,66 @@ handle_call({'GET', Ud, Path, https}, _From, State) ->
                             end,
                             Struct),
             {reply, {ok, mochijson2:encode(Ret)}, State};
-        ["transactions"|More] ->
-            Transactions = pay_server:get_user_transactions(Userdata),
-            {OtherUid, F, T} = case More of
-                         [To] ->
-                             {PNum,   []} = string:to_integer(To),
-                             {undefined, 0, PNum};
-                         [From, To] ->
-                             {PFrom, []} = string:to_integer(From),
-                             {PNum,   []} = string:to_integer(To),
-                             {undefined, PFrom, PNum};
-                         [OtherU, From, To] ->
-                             {PFrom, []} = string:to_integer(From),
-                             {PNum,   []} = string:to_integer(To),
-                             {OtherU, PFrom, PNum};
-                         _ -> {undefined, 0, 999} %% max num seems almost to large...
-                     end,
+        _ ->
+            Userdata = users:update_find(Ud),
+            case Path of
+                ["transactions"|More] ->
+                    Transactions = pay_server:get_user_transactions(Userdata),
+                    {OtherUid, F, T} = case More of
+                                           [To] ->
+                                               {PNum,   []} = string:to_integer(To),
+                                               {undefined, 0, PNum};
+                                           [From, To] ->
+                                               {PFrom, []} = string:to_integer(From),
+                                               {PNum,   []} = string:to_integer(To),
+                                               {undefined, PFrom, PNum};
+                                           [OtherU, From, To] ->
+                                               {PFrom, []} = string:to_integer(From),
+                                               {PNum,   []} = string:to_integer(To),
+                                               {OtherU, PFrom, PNum};
+                                           _ -> {undefined, 0, 999} %% max num seems almost to large...
+                                       end,
 
-            Filtered = case OtherUid of
-                           undefined -> Transactions;
-                           _ ->
-                               BinUid = list_to_binary(OtherUid),
-                               lists:filter(fun(Props) ->
-                                                    lists:any(fun({?UID1, TBinUid}) ->
-                                                                      TBinUid =:= BinUid;
-                                                                 ({?UID2, TBinUid}) ->
-                                                                      TBinUid =:= BinUid;
-                                                                 ({<<"paid_by">>, TBinUid}) ->
-                                                                      TBinUid =:= BinUid;
-                                                                 ({<<"paid_for">>, TBinUid}) ->
-                                                                      TBinUid =:= BinUid;
+                    Filtered = case OtherUid of
+                                   undefined -> Transactions;
+                                   _ ->
+                                       BinUid = list_to_binary(OtherUid),
+                                       lists:filter(fun(Props) ->
+                                                            lists:any(fun({?UID1, TBinUid}) ->
+                                                                              TBinUid =:= BinUid;
+                                                                         ({?UID2, TBinUid}) ->
+                                                                              TBinUid =:= BinUid;
+                                                                         ({<<"paid_by">>, TBinUid}) ->
+                                                                              TBinUid =:= BinUid;
+                                                                         ({<<"paid_for">>, TBinUid}) ->
+                                                                              TBinUid =:= BinUid;
 
-                                                                 (_) -> false
-                                                              end, Props)
-                                            end,
-                                            Transactions)
+                                                                         (_) -> false
+                                                                      end, Props)
+                                                    end,
+                                                    Transactions)
 
-                       end,
+                               end,
 
-            Sorted = lists:sort(fun(T1,T2) ->
-                                        DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
-                                        DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
-                                        DT1 >= DT2 end,
-                                Filtered),
+                    Sorted = lists:sort(fun(T1,T2) ->
+                                                DT1 = proplists:get_value(?SERVER_TIMESTAMP, T1),
+                                                DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
+                                                DT1 >= DT2 end,
+                                        Filtered),
 
-            Return = lists:map(fun(List) ->
-                                       ?JSONSTRUCT([?TRANSACTION(List)]) end,
-                               lists:sublist(lists:nthtail(F, Sorted), T)),
-            Return2 = mochijson2:encode(Return),
-            {reply, {ok, Return2}, State};
-        ["debts"] ->
-            Return = lists:map(fun(List) ->
-                                       ?JSONSTRUCT([?DEBT(List)]) end,
-                               pay_server:get_user_debt(Userdata)),
-            Return2 = mochijson2:encode(Return),
-            {reply, {ok, Return2}, State};
-        _ -> {reply, {ok, <<"ok">>}, State}
+                    Return = lists:map(fun(List) ->
+                                               ?JSONSTRUCT([?TRANSACTION(List)]) end,
+                                       lists:sublist(lists:nthtail(F, Sorted), T)),
+                    Return2 = mochijson2:encode(Return),
+                    {reply, {ok, Return2}, State};
+                ["debts"] ->
+                    Return = lists:map(fun(List) ->
+                                               ?JSONSTRUCT([?DEBT(List)]) end,
+                                       pay_server:get_user_debt(Userdata)),
+                    Return2 = mochijson2:encode(Return),
+                    {reply, {ok, Return2}, State};
+                _ -> {reply, {ok, <<"ok">>}, State}
+            end
     end;
 
 handle_call(Request, _From, State) ->

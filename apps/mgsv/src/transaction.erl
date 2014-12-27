@@ -5,7 +5,7 @@
 
 
 -export([create_transactiontable/0, to_proplist/2, add/2, get/1, reconstruct/1,
-        from_proplist/2, delete/1]).
+        from_proplist/2, delete/1, change_internal_uid/2]).
 
 create_transactiontable() ->
     Res = mnesia:create_table( transaction,
@@ -46,6 +46,19 @@ get([T1,T2]) ->
     Ts3 = Ts1 -- Ts2,
     Ts1 -- Ts3.
 
+change_internal_uid(OldUser, NewUser) ->
+    Transactions = transaction:get(OldUser),
+    NewUuid = NewUser#user.internal_uid,
+    lists:foreach(fun(T)->
+                          OldUuid = OldUser#user.internal_uid,
+
+                          case T#transaction.paid_by of
+                              OldUuid ->
+                                  transaction:add(T#transaction{ paid_by = NewUuid }, NewUser);
+                              _ ->
+                                  transaction:add(T#transaction{ paid_for = NewUuid }, NewUser)
+                          end
+                  end, Transactions).
 
 delete(T = #transaction{}) ->
     mnesia:dirty_delete(transaction, T#transaction.transaction_id).

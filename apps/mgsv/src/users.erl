@@ -15,8 +15,11 @@
          update_parts/2,
          to_proplist/2,
          count_by_usertype/1,
+         users_by_type/1,
          update_find/1,
-         from_proplist/2
+         from_proplist/2,
+         update_remove_usermapping/2,
+         fetch_fb_userdata/1
         ]).
 
 -record(user_mapping,
@@ -52,8 +55,8 @@ add(User, #user_data{ user = no_such_user, %% adding self
                       username = Username,
                       id = Id
                     }) ->
-    case User#user.username of
-        Username ->
+    case User#user.uid of
+        Id ->
             ReqBU = #user{ uid = Id,
                            username = Username
                          },
@@ -86,6 +89,19 @@ update_find(Userdata = #user_data{}) ->
     U = case users:get({uid, Id}) of
             #user{ username = Username} = U1 ->  %% all is well here
                 U1;
+            % if some one else has added this user then we need to fix
+            #user{ username = Id } = U1 ->
+                case users:get({username, Username}) of
+                    #user{} = U2 -> %% here we must change all debts from one
+                               %% user to another
+                        transaction:change_internal_uid(U1,U2),
+                        users:delete(U1),
+                        U1;
+                    no_such_user ->
+                        UU1 = U1#user{username = Username},
+                        update_remove_usermapping(U1, UU1),
+                        UU1
+                end;
             #user{} = U2 ->
                 lager:error("Something is wrong, user might have changed username ~p~n~p~n", [U2, Userdata]),
                 no_such_user;
@@ -166,7 +182,14 @@ get(Id) ->
             mnesia:dirty_index_read(user_mapping, Id, #user_mapping.internal_uid)).
 
 count_by_usertype(UserType) ->
-    length(mnesia:dirty_index_read(user_mapping, UserType, #user_mapping.user_type)).
+    length(users_by_type(UserType)).
+
+users_by_type(UserType) ->
+    Us = mnesia:dirty_index_read(user_mapping, UserType, #user_mapping.user_type),
+    lists:map(fun(#user_mapping{internal_uid = IUID}) ->
+                      users:get({internal_uid,IUID})
+              end,
+              Us).
 
 from_mapping([UserMapping,UserMapping]) ->
     from_mapping([UserMapping]);
@@ -249,11 +272,7 @@ from_proplist(List, Userdata) ->
     Uuid = common:binary_uuid(),
     User = #user{
               uid = Uuid,
-              username = Uuid,
-              user_edit_details =
-                  common:mod_edit_details(
-                    #edit_details{},
-                    Userdata#user_data.user)
+              username = Uuid
              },
     UUser = case Userdata#user_data.protocol of
                 "0.36" ->
@@ -264,6 +283,17 @@ from_proplist(List, Userdata) ->
                                         currency  = ?SWEDISH_CRONA
                                        }, List)
             end,
+    CU = case {Userdata#user_data.user, Userdata#user_data.id} of
+             {no_such_user,Userid} when Userid == UUser#user.uid ->
+                 UUser;
+             {U, _} ->
+                 U
+         end,
+    UserEditDetails =
+        common:mod_edit_details(
+          #edit_details{},
+          CU
+         ),
     TUser = case UUser of %% todo check if user
                 #user{ user_type = ?LOCAL_USER } ->
                     UUser#user{ uid = Uuid,
@@ -272,7 +302,7 @@ from_proplist(List, Userdata) ->
                 _ ->
                     UUser
             end,
-    validate_user(TUser).
+    validate_user(TUser#user{ user_edit_details = UserEditDetails }).
 
 validate_user(User =
                   #user{ username = Username,
@@ -363,14 +393,29 @@ from_proplist_old(_User, [Illegal| _Rest]) ->
 %%     Currency = proplists:get_value(<<"currency">>, PropList).
 
 reconstruct(DBName) ->
+    D = case file:consult("/tmp/test.erl") of
+            {ok,[]} -> [];
+            {ok, [De]} -> De
+        end,
+    Data = lists:map(fun({A,B}) -> {B,A} end, D),
     dets:traverse(DBName,
                   fun({_Uid,PropList}) ->
-                          Uid = proplists:get_value(<<"uid">>, PropList),
+                          Username = proplists:get_value(<<"uid">>, PropList),
                           DisplayName = proplists:get_value(<<"user">>, PropList),
                           UserType = proplists:get_value(<<"usertype">>, PropList),
                           Currency = proplists:get_value(<<"currency">>, PropList),
                           ServerTimestamp = proplists:get_value(<<"server_timestamp">>, PropList),
-                          User = create(Uid, Uid, DisplayName, UserType, Currency, Uid),
+                          Uid = case UserType of
+                                    ?FACEBOOK_USER ->
+                                        case proplists:get_value(Username, Data) of
+                                            undefined ->
+                                                io:format("AWh fetching through the webz ~p~n",[Username]),
+                                                fetch_fb_userdata(Username);
+                                            V -> V
+                                        end;
+                                    _ -> Username
+                                end,
+                          User = create(Uid, Username, DisplayName, UserType, Currency, Uid),
                           UUID = User#user.internal_uid,
                           Edits = #edit_details{
                                      created_at = ServerTimestamp,
@@ -396,3 +441,20 @@ reconstruct(DBName) ->
                           continue
                   end).
 
+fetch_fb_userdata(UserId) ->
+    URL = "https://graph.facebook.com/"
+        ++ binary_to_list(UserId),
+    Method = get,
+    Header = [],
+    HTTPOptions = [],
+    Options = [],
+    {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
+        = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
+    {struct, List} = mochijson2:decode(Body),
+    case proplists:get_value(<<"id">>, List) of
+        undefined -> io:format("but got no id");
+        Other ->
+            Other
+    end.
+%%    https://graph.facebook.com/sofiagallo08
+%%{"id":"100000090500486","first_name":"Sofia","gender":"female","last_name":"Gallo","locale":"es_LA","name":"Sofia Gallo","username":"sofiagallo08"}

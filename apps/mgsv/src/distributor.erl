@@ -200,11 +200,13 @@ to_html(ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     Scheme = ReqData#wm_reqdata.scheme,
-    case Scheme of
-        https ->
+    UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
+    ExpectedProtocol = wrq:get_req_header("protocolversion", ReqData),
+    case {Scheme, ExpectedProtocol} of
+        {_, undefined} ->
+            {false, ReqData, Context};
+        {https,_} ->
             %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
-            UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
-            ExpectedProtocol = wrq:get_req_header("protocolversion", ReqData),
             {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
                                                    {true,Vars};
                                               (V,{true,{O,_}}) ->

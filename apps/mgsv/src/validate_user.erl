@@ -41,7 +41,8 @@ handle_call({validate, Token, Email, ?GMAIL_USER}, _From, State = [TabName]) ->
                  {Email, Id} ->
                      ets:insert(TabName, {Email, Id, ShaToken}),
                      {reply, {Email, Id}, State};
-                 _ -> {reply, undefined, State}
+                 _ ->
+                     {reply, undefined, State}
              end
     end;
 
@@ -54,6 +55,9 @@ handle_call({validate, Token, Uid, ?FACEBOOK_USER}, _From, State = [TabName]) ->
                  {Uid, Id} ->
                      ets:insert(TabName, {Uid, Id, ShaToken}),
                      {reply, {Uid, Id}, State};
+                 {Uid2, Id} -> %% in case user gives us id instead of username
+%                     ets:insert(TabName, {Id, Uid2, ShaToken}),
+                     {reply, {Uid2, Id}, State};
                  _ -> {reply, undefined, State}
              end
     end;
