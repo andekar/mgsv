@@ -275,7 +275,7 @@ request_data(Data) ->
     try lists:flatten(destructify(mochijson2:decode(Data)))
     catch
         _:Errors ->
-            lager:alert("CRASH when decoding json ~p~n~p", [Errors, erlang:get_stacktrace()
-]),
+            lager:alert("CRASH when decoding json ~p~n~p~nData: ~p", [Errors, erlang:get_stacktrace()
+, Data]),
             []
     end.

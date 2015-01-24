@@ -15,7 +15,7 @@ create_debttable() ->
 
 add(#debt{} = D, ReqBy = #user{}) ->
     UD = D#debt{ edit_details = common:mod_edit_details(D#debt.edit_details, ReqBy)},
-    mnesia:dirty_write(UD).
+    {atomic,_} = mnesia:transaction(fun() -> mnesia:write(UD) end).
 
 add_transaction(#transaction{} = T, ReqBy = #user{}) ->
     PaidB = T#transaction.paid_by,
@@ -55,7 +55,9 @@ add_transaction(#transaction{} = T, ReqBy = #user{}) ->
     end.
 
 delete(#debt{} = D) ->
-    mnesia:dirty_delete(debt,D#debt.id).
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:delete({debt,D#debt.id}) end),
+    Res.
 
 delete(#transaction{} = T, ReqBy = #user{}) ->
     debt:add_transaction(T#transaction{amount = T#transaction.amount * -1}, ReqBy).
@@ -63,11 +65,15 @@ delete(#transaction{} = T, ReqBy = #user{}) ->
 get(User = #user{}) ->
     debt:get({uid, User#user.internal_uid});
 get({uid, Uid}) ->
-        mnesia:dirty_index_read(debt, Uid, #debt.uid1) ++
-        mnesia:dirty_index_read(debt, Uid, #debt.uid2);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:index_read(debt, Uid, #debt.uid1) ++
+                                                  mnesia:index_read(debt, Uid, #debt.uid2) end,[]),
+    Res;
 get({uid_username, Uid}) ->
-        mnesia:dirty_index_read(debt, Uid, #debt.uid1_username) ++
-        mnesia:dirty_index_read(debt, Uid, #debt.uid2_username);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:index_read(debt, Uid, #debt.uid1_username) ++
+                                                  mnesia:index_read(debt, Uid, #debt.uid2_username) end),
+    Res;
 get([T1,T2]) ->
     Ts1 = debt:get(T1),
     Ts2 = debt:get(T2),

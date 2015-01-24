@@ -23,11 +23,11 @@
 
 start_link() ->
     AndroidId =
-        case application:get_env(push_android, id) of
-            undefined ->
-                undefined; %crash
+        case application:get_env(mgsv, id) of
             {ok, Val} ->
-                Val
+                Val;
+            Other ->
+                lager:info("failed to aquire env mgsv id ~p",[Other])
         end,
     lager:info("Starting pay_push_notification"),
     apns:connect(payapp, fun(Ab,Ba) -> error_logger:error_msg("Error ~p ~p", [Ab,Ba]) end, fun(Arg) -> error_logger:info_msg("error ~p~n~n",[Arg]), remove_ios_token(Arg) end),

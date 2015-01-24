@@ -19,7 +19,9 @@ create_transactiontable() ->
 
 add(T = #transaction{}, ReqBy = #user{}) ->
     UT = T#transaction{ edit_details = common:mod_edit_details(T#transaction.edit_details, ReqBy)},
-    mnesia:dirty_write(UT);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:write(UT) end),
+    Res;
 %add(T, ReqBy = #user{}) when is_list(T)->
 %    add(from_proplist(T), ReqBy);
 add(_, no_such_user) ->
@@ -33,13 +35,19 @@ get({User = #user{}, User2 = #user{}}) ->
     transaction:get([{paid_id, User#user.internal_uid},
                      {paid_id, User2#user.internal_uid}]);
 get({username, Username}) ->
-    mnesia:dirty_index_read(transaction, Username, #transaction.paid_by_username) ++
-        mnesia:dirty_index_read(transaction, Username, #transaction.paid_for_username);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:index_read(transaction, Username, #transaction.paid_by_username) ++
+                                  mnesia:index_read(transaction, Username, #transaction.paid_for_username) end),
+    Res;
 get({transaction_id, Id}) ->
-    mnesia:dirty_read(transaction, Id);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:read(transaction, Id) end),
+    Res;
 get({paid_id, Id}) ->
-    mnesia:dirty_index_read(transaction, Id, #transaction.paid_by) ++
-        mnesia:dirty_index_read(transaction, Id, #transaction.paid_for);
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:index_read(transaction, Id, #transaction.paid_by) ++
+                                                  mnesia:index_read(transaction, Id, #transaction.paid_for) end),
+    Res;
 get([T1,T2]) ->
     Ts1 = transaction:get(T1),
     Ts2 = transaction:get(T2),
@@ -61,7 +69,9 @@ change_internal_uid(OldUser, NewUser) ->
                   end, Transactions).
 
 delete(T = #transaction{}) ->
-    mnesia:dirty_delete(transaction, T#transaction.transaction_id).
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:delete({transaction, T#transaction.transaction_id}) end),
+    Res.
 
 to_proplist(User, Userdata) ->
     case Userdata#user_data.protocol of

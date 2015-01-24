@@ -72,8 +72,9 @@ add(User, ReqBy = #user{}) ->
         [no_such_user, no_such_user] ->
             UserMapping = create_mapping(User, ReqBy),
             UserInfo = create_userinfo(User,ReqBy),
-            mnesia:dirty_write(UserMapping),
-            mnesia:dirty_write(UserInfo),
+            {atomic,_} = mnesia:transaction(fun() ->
+                                      mnesia:write(UserMapping),
+                                      mnesia:write(UserInfo) end),
             users:get({internal_uid, UserMapping#user_mapping.internal_uid});
         [UUser = #user{},_] ->
             UUser;
@@ -94,7 +95,7 @@ update_find(Userdata = #user_data{}) ->
                 case users:get({username, Username}) of
                     #user{} = U2 -> %% here we must change all debts from one
                                %% user to another
-                        transaction:change_internal_uid(U1,U2),
+                        {atomic,_} = transaction:change_internal_uid(U1,U2),
                         users:delete(U1),
                         U1;
                     no_such_user ->
@@ -124,16 +125,24 @@ update_find(Userdata = #user_data{}) ->
 
 update(User, ReqBy) ->
     UserInfo = create_userinfo(User,ReqBy),
-    mnesia:dirty_write(UserInfo).
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:write(UserInfo) end),
+    Res.
 
 update_remove_usermapping(OldUser,NewUser) ->
-    mnesia:dirty_delete(user_mapping, OldUser#user.uid),
+    {atomic,_} = mnesia:transaction(fun() ->
+                                            mnesia:delete({user_mapping, OldUser#user.uid}) end),
     UserMapping = create_mapping(NewUser, NewUser),
-    mnesia:dirty_write(UserMapping).
+    {atomic,Res} = mnesia:transaction(fun() ->
+                              mnesia:write(UserMapping) end),
+    Res.
 
 delete(User = #user{}) ->
-    mnesia:dirty_delete(user_info, User#user.internal_uid),
-    mnesia:dirty_delete(user_mapping, User#user.uid);
+    {atomic, Res} = mnesia:transaction(fun() ->
+                              mnesia:delete({user_info, User#user.internal_uid}),
+                              mnesia:delete({user_mapping, User#user.uid})
+                      end),
+    Res;
 delete(Uid) ->
     delete(users:get(Uid)).
 
@@ -168,24 +177,30 @@ create_mapping(User, ReqBy) ->
       }.
 
 get({username,Username}) ->
-    from_mapping(
-      mnesia:dirty_index_read(user_mapping, Username, #user_mapping.username));
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:index_read(user_mapping, Username, #user_mapping.username) end),
+    from_mapping(Res);
 get({uid, UserId}) ->
-    from_mapping(
-      mnesia:dirty_read(user_mapping, UserId));
+    {atomic,Res} = mnesia:transaction(fun() ->
+                                              mnesia:read(user_mapping, UserId) end),
+    from_mapping(Res);
 get({internal_uid, UserId}) ->
-    from_mapping(
-      mnesia:dirty_index_read(user_mapping, UserId, internal_uid));
+    {atomic,Res} = mnesia:transaction(fun() ->
+                               mnesia:index_read(user_mapping, UserId, internal_uid) end),
+    from_mapping(Res);
 get(Id) ->
-    from_mapping(mnesia:dirty_read(user_mapping, Id) ++
-            mnesia:dirty_index_read(user_mapping, Id, #user_mapping.username) ++
-            mnesia:dirty_index_read(user_mapping, Id, #user_mapping.internal_uid)).
+    {atomic, Res} = mnesia:transaction(fun() ->
+                                               mnesia:read(user_mapping, Id) ++
+                                                   mnesia:index_read(user_mapping, Id, #user_mapping.username) ++
+                                                   mnesia:index_read(user_mapping, Id, #user_mapping.internal_uid) end),
+    from_mapping(Res).
 
 count_by_usertype(UserType) ->
     length(users_by_type(UserType)).
 
 users_by_type(UserType) ->
-    Us = mnesia:dirty_index_read(user_mapping, UserType, #user_mapping.user_type),
+    {atomic,Us} = mnesia:transaction(fun() ->
+                                   mnesia:index_read(user_mapping, UserType, #user_mapping.user_type) end),
     lists:map(fun(#user_mapping{internal_uid = IUID}) ->
                       users:get({internal_uid,IUID})
               end,
@@ -194,7 +209,9 @@ users_by_type(UserType) ->
 from_mapping([UserMapping,UserMapping]) ->
     from_mapping([UserMapping]);
 from_mapping([UserMapping]) ->
-    [UserInfo] = mnesia:dirty_read(user_info, UserMapping#user_mapping.internal_uid),
+    {atomic,[UserInfo]} =
+            mnesia:transaction(fun() ->
+                                      mnesia:read(user_info, UserMapping#user_mapping.internal_uid) end),
     #user{
        internal_uid = UserMapping#user_mapping.internal_uid,
        uid = UserMapping#user_mapping.uid,
@@ -436,8 +453,10 @@ reconstruct(DBName) ->
                                         currency = User#user.currency,
                                         user_edit_details = Edits
                                        },
-                          mnesia:dirty_write(UserMapping),
-                          mnesia:dirty_write(UserInfo),
+
+                          {atomic,_} = mnesia:transaction(fun() ->
+                                                                  mnesia:write(UserMapping),
+                                                                  mnesia:write(UserInfo) end),
                           continue
                   end).
 
@@ -457,4 +476,4 @@ fetch_fb_userdata(UserId) ->
             Other
     end.
 %%    https://graph.facebook.com/sofiagallo08
-%%{"id":"100000090500486","first_name":"Sofia","gender":"female","last_name":"Gallo","locale":"es_LA","name":"Sofia Gallo","username":"sofiagallo08"}
+%%{"id":"100000090500486","first_name":"ssss","gender":"%%%","last_name":"LLLL","locale":"LRLRWL","name":"Sofia","username":"sofia"}
