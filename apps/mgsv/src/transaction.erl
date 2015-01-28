@@ -312,9 +312,10 @@ check_for_missing_fields(V) ->
 
 reconstruct(DBName) ->
     dets:traverse(DBName,
-                  fun({_DebtId, PropList}) ->
-                          case from_proplist_old(PropList, #user{}) of
-                              #transaction{} = T ->
+                  fun({DebtId, PropList}) ->
+                          case {from_proplist_old(PropList, #user{}),
+                                should_be_added({DebtId,PropList})} of
+                              {#transaction{} = T, true} ->
                                   ReqBy = users:get({internal_uid, T#transaction.paid_by}),
                                   ok = case ReqBy of
                                       no_such_user ->
@@ -326,3 +327,23 @@ reconstruct(DBName) ->
                           end,
                           continue
                   end).
+
+should_be_added({TId,PList}) ->
+    {<<"uid1">>, UID1} = proplists:lookup(<<"uid1">>, PList),
+    {<<"uid2">>, UID2} = proplists:lookup(<<"uid2">>, PList),
+    [{_,U1TlP}] = dets:lookup("../../debt_approval_transactions_0.2c.dets",UID1),
+    [{_,U2TlP}] = dets:lookup("../../debt_approval_transactions_0.2c.dets",UID2),
+    {approved_debts,U1Tl} = proplists:lookup(approved_debts, U1TlP),
+    {approved_debts,U2Tl} = proplists:lookup(approved_debts, U2TlP),
+
+    case {lists:member(TId, U1Tl),lists:member(TId, U2Tl)} of
+        {true,true}  -> true;
+        {true,false} -> io:format("UID1 ~p but not UID2 ~p~n", [UID1, UID2]), false;
+        {false,true} -> io:format("UID2 ~p but not UID1 ~p~n", [UID2, UID1]), false;
+        {false, false} -> false
+%% case {UID1,UID2} of
+%%                               {<<"andersk84@gmail.com">>, _} -> io:format("~p ~p~n", [UID1, UID2]);
+%%                               {_, <<"andersk84@gmail.com">>} -> io:format("~p ~p~n", [UID1, UID2]);
+%%                               _ -> ok
+%%                           end
+    end.
