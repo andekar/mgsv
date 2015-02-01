@@ -3,7 +3,7 @@
 -include("common.hrl").
 -include("payapp.hrl").
 
--export([create_debttable/0, add/2, add_transaction/2, delete/1, delete/2, get/1,to_proplist/2,reconstruct/1]).
+-export([create_debttable/0, add/2, add_transaction/2, delete/1, delete/2, get/1,to_proplist/2]).
 
 create_debttable() ->
     Res = mnesia:create_table( debt,
@@ -115,41 +115,3 @@ to_proplist_old(Debt) ->
      {?UID2, Debt#debt.uid2_username},
      {?AMOUNT, Debt#debt.amount},
     {?CURRENCY, Debt#debt.currency}].
-
-reconstruct(DebtsDB) ->
-    dets:traverse(DebtsDB,
-                  fun({{TUid1,TUid2}, Props}) ->
-                          U1 = users:get(TUid1),
-                          U2 = users:get(TUid2),
-                          case {U1,U2} of
-                              {no_such_user, _Any} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
-                              {_Any, no_such_user} ->
-                                  lager:info("User1 ~p User2 ~p OldUID1 ~p OldUID2~p~n", [U1,U2, TUid1, TUid2]);
-                              _ ->
-                                  Uid1 = element(2,U1),
-                                  Uid2 = element(2,U2),
-                                  Currency = proplists:get_value(?CURRENCY, Props),
-                                  Amount = proplists:get_value(?AMOUNT, Props),
-                                  case Uid1 < Uid2 of
-                                      true ->
-                                          debt:add(#debt{
-                                                      uid1 = Uid1,
-                                                      uid1_username = TUid1,
-                                                      uid2 = Uid2,
-                                                      uid2_username = TUid2,
-                                                      amount = Amount,
-                                                      currency = Currency
-                                                     }, U1);
-                                      false ->
-                                          debt:add(#debt{
-                                                      uid1 = Uid2,
-                                                      uid1_username = TUid2,
-                                                      uid2 = Uid1,
-                                                      uid2_username = TUid1,
-                                                      amount = -1 * Amount,
-                                                      currency = Currency
-                                                     }, U1)
-                                  end
-                          end,
-                          continue end).

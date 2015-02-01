@@ -4,7 +4,7 @@
 -include("payapp.hrl").
 
 
--export([create_transactiontable/0, to_proplist/2, add/2, get/1, reconstruct/1,
+-export([create_transactiontable/0, to_proplist/2, add/2, get/1,
         from_proplist/2, delete/1, change_internal_uid/2]).
 
 create_transactiontable() ->
@@ -22,8 +22,6 @@ add(T = #transaction{}, ReqBy = #user{}) ->
     {atomic,Res} = mnesia:transaction(fun() ->
                               mnesia:write(UT) end),
     Res;
-%add(T, ReqBy = #user{}) when is_list(T)->
-%    add(from_proplist(T), ReqBy);
 add(_, no_such_user) ->
     lager:info("NOSUCHUSERERROR in add~n",[]),
     nok.
@@ -309,41 +307,3 @@ check_for_missing_fields(T = #transaction{}) ->
     T;
 check_for_missing_fields(V) ->
     {error, V}.
-
-reconstruct(DBName) ->
-    dets:traverse(DBName,
-                  fun({DebtId, PropList}) ->
-                          case {from_proplist_old(PropList, #user{}),
-                                should_be_added({DebtId,PropList})} of
-                              {#transaction{} = T, true} ->
-                                  ReqBy = users:get({internal_uid, T#transaction.paid_by}),
-                                  ok = case ReqBy of
-                                      no_such_user ->
-                                               lager:info("error do not find user ~p in transaction ~n~p~n", [T#transaction.paid_by, T]);
-                                           _ ->
-                                               add(T, ReqBy)
-                                       end;
-                              E -> lager:info("error ~p when adding ~p~n",[E,PropList])
-                          end,
-                          continue
-                  end).
-
-should_be_added({TId,PList}) ->
-    {<<"uid1">>, UID1} = proplists:lookup(<<"uid1">>, PList),
-    {<<"uid2">>, UID2} = proplists:lookup(<<"uid2">>, PList),
-    [{_,U1TlP}] = dets:lookup("../../debt_approval_transactions_0.2c.dets",UID1),
-    [{_,U2TlP}] = dets:lookup("../../debt_approval_transactions_0.2c.dets",UID2),
-    {approved_debts,U1Tl} = proplists:lookup(approved_debts, U1TlP),
-    {approved_debts,U2Tl} = proplists:lookup(approved_debts, U2TlP),
-
-    case {lists:member(TId, U1Tl),lists:member(TId, U2Tl)} of
-        {true,true}  -> true;
-        {true,false} -> io:format("UID1 ~p but not UID2 ~p~n", [UID1, UID2]), false;
-        {false,true} -> io:format("UID2 ~p but not UID1 ~p~n", [UID2, UID1]), false;
-        {false, false} -> false
-%% case {UID1,UID2} of
-%%                               {<<"andersk84@gmail.com">>, _} -> io:format("~p ~p~n", [UID1, UID2]);
-%%                               {_, <<"andersk84@gmail.com">>} -> io:format("~p ~p~n", [UID1, UID2]);
-%%                               _ -> ok
-%%                           end
-    end.

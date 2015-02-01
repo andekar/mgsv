@@ -11,15 +11,13 @@
          get/1,
          delete/1,
          update/2,
-         reconstruct/1,
          update_parts/2,
          to_proplist/2,
          count_by_usertype/1,
          users_by_type/1,
          update_find/1,
          from_proplist/2,
-         update_remove_usermapping/2,
-         fetch_fb_userdata/1
+         update_remove_usermapping/2
         ]).
 
 -record(user_mapping,
@@ -402,78 +400,3 @@ from_proplist_old(User, [{?USER,Displayname}|Rest]) ->
 from_proplist_old(_User, [Illegal| _Rest]) ->
     lager:info("unsupported transaction variable ~p~n",[Illegal]),
     unsupported_variable.
-
-%% from_proplist(PropList) ->
-%%     Uid = proplists:get_value(<<"uid">>, PropList),
-%%     DisplayName = proplists:get_value(<<"user">>, PropList),
-%%     UserType = proplists:get_value(<<"usertype">>, PropList),
-%%     Currency = proplists:get_value(<<"currency">>, PropList).
-
-reconstruct(DBName) ->
-    D = case file:consult("/tmp/test.erl") of
-            {ok,[]} -> [];
-            {ok, [De]} -> De
-        end,
-    Data = lists:map(fun({A,B}) -> {B,A} end, D),
-    dets:traverse(DBName,
-                  fun({_Uid,PropList}) ->
-                          Username = proplists:get_value(<<"uid">>, PropList),
-                          DisplayName = proplists:get_value(<<"user">>, PropList),
-                          UserType = proplists:get_value(<<"usertype">>, PropList),
-                          Currency = proplists:get_value(<<"currency">>, PropList),
-                          ServerTimestamp = proplists:get_value(<<"server_timestamp">>, PropList),
-                          Uid = case UserType of
-                                    ?FACEBOOK_USER ->
-                                        case proplists:get_value(Username, Data) of
-                                            undefined ->
-                                                io:format("AWh fetching through the webz ~p~n",[Username]),
-                                                fetch_fb_userdata(Username);
-                                            V -> V
-                                        end;
-                                    _ -> Username
-                                end,
-                          User = create(Uid, Username, DisplayName, UserType, Currency, Uid),
-                          UUID = User#user.internal_uid,
-                          Edits = #edit_details{
-                                     created_at = ServerTimestamp,
-                                     created_by = UUID,
-                                     last_change = ServerTimestamp,
-                                     last_changed_by = UUID
-                                    },
-                          UserMapping = #user_mapping{
-                                           internal_uid = User#user.internal_uid,
-                                           uid = User#user.uid,
-                                           username = User#user.username,
-                                           user_type = User#user.user_type,
-                                           user_mapping_details = Edits
-                                          },
-                          UserInfo = #user_info{
-                                        internal_uid = User#user.internal_uid,
-                                        displayname = User#user.displayname,
-                                        currency = User#user.currency,
-                                        user_edit_details = Edits
-                                       },
-
-                          {atomic,_} = mnesia:transaction(fun() ->
-                                                                  mnesia:write(UserMapping),
-                                                                  mnesia:write(UserInfo) end),
-                          continue
-                  end).
-
-fetch_fb_userdata(UserId) ->
-    URL = "https://graph.facebook.com/"
-        ++ binary_to_list(UserId),
-    Method = get,
-    Header = [],
-    HTTPOptions = [],
-    Options = [],
-    {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
-        = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
-    {struct, List} = mochijson2:decode(Body),
-    case proplists:get_value(<<"id">>, List) of
-        undefined -> io:format("but got no id");
-        Other ->
-            Other
-    end.
-%%    https://graph.facebook.com/sofiagallo08
-%%{"id":"100000090500486","first_name":"ssss","gender":"%%%","last_name":"LLLL","locale":"LRLRWL","name":"Sofia","username":"sofia"}
