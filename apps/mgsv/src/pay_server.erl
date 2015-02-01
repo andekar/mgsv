@@ -381,42 +381,10 @@ terminate(Reason, _State) ->
     lager:emergency("TERMINATING ~p~n~p", [Reason, erlang:get_stacktrace()]),
     ok.
 
-code_change(OldVsn, State, "0.3.6") ->
-    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, "0.3.6"]),
-    mnesia:stop(),
-    mnesia:create_schema([node()]),
-    mnesia:start(),
-    lager:info("MNesia started, trying to create dbs",[]),
-    spawn_link(fun() ->
-    users:create_mappingtable(),
-    users:create_usertable(),
-    lager:info("Trying to reconstruct users",[]),
-    users:reconstruct(?USERS(State)),
+code_change(OldVsn, State, "0.3.7" = NewVsn) ->
+    lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, NewVsn]),
 
-    Users = ?USERS(State),
-    db_w:close(Users),
-
-    Debts = ?DEBTS(State),
-%    Receiver = self(),
-
-    lager:info("trying to reconstruct debts"),
-    debt:create_debttable(),
-    debt:reconstruct(Debts),
-    db_w:close(Debts),
-%                       Receiver ! ok
-%               end),
-
-%    spawn_link(fun() ->
-    lager:info("trying to reconstruct transactions"),
-    transaction:create_transactiontable(),
-    TransactionsDb = ?DEBT_TRANSACTIONS(State),
-    transaction:reconstruct(TransactionsDb),
-    db_w:close(TransactionsDb)
-%                           Receiver ! ok
-               end),
-
-    db_w:close(?FEEDBACK(State)),
-    application:set_env(webmachine, server_name, "PayApp/0.3.6"),
+    application:set_env(webmachine, server_name, "PayApp/" ++ NewVsn),
     {ok, []};
 
 code_change(OldVsn, State, Extra) ->

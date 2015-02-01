@@ -12,3 +12,4 @@ rebar
 *.org
 *.key
 *.der
+rel/files/sys.config
