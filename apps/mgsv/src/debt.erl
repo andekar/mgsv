@@ -86,6 +86,8 @@ to_proplist(Debt, Userdata) ->
     case Userdata#user_data.protocol of
         "0.36" ->
             to_proplist_36(Debt);
+        "0.37" ->
+            to_proplist_36(Debt);
         _ ->
             to_proplist_old(Debt)
     end.

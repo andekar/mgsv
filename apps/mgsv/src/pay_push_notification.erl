@@ -87,7 +87,7 @@ handle_call(All, _From, State) ->
 
 handle_cast({add_user_ios, Uuid, DevId}, #state{ios = IOS,
                                                 android = _Android} = State) ->
-    lager:info("~p Adding ios user ~p with UUid ~p",[?MODULE, Uuid, DevId]),
+    lager:info("~p Adding ios user ~p with deviceId ~p",[?MODULE, Uuid, DevId]),
     case dets:lookup(IOS, Uuid) of
         Any when is_list(Any) ->
             case lists:any(fun({_Uuid, DevTok, _Count}) -> DevTok == DevId end, Any) of
@@ -119,11 +119,17 @@ handle_cast({notify_user, Uuid, Message}, State) when is_list(Uuid) ->
 
 handle_cast({notify_user, Uuid, Message}, #state{ios = IOS,
                                                  android = Android} = State) ->
+    IsTestServer = case application:get_env(mgsv, test_server) of
+                       {ok, Bool} ->
+                           Bool;
+                       _ ->
+                           false
+                   end,
     AndroidMessage = [{<<"data">>, [
                                     {<<"message">>, Message}
                                    ]}],
-    case dets:lookup(IOS, Uuid) of
-        Any when is_list(Any) ->
+    case {IsTestServer, dets:lookup(IOS, Uuid)} of
+        {false, Any} when is_list(Any) ->
             lists:map(fun({_Uuid, DevTok, Count}) ->
                               try
                                   lager:info("devicetoken ~p message ~p count ~p Uuid ~p", [DevTok, binary_to_list(Message), Count, Uuid]),
@@ -136,8 +142,8 @@ handle_cast({notify_user, Uuid, Message}, #state{ios = IOS,
                       end, Any);
         _ -> ok
     end,
-    case dets:lookup(Android, Uuid) of
-        Any2 when is_list(Any2) ->
+    case {IsTestServer, dets:lookup(Android, Uuid)} of
+        {false,Any2} when is_list(Any2) ->
             lists:map(fun({_Uuid, DevTok}) ->
                               lager:info("devicetoken ~p message ~p Uuid ~p", [DevTok, AndroidMessage, Uuid]),
                               DTok = case is_list(DevTok) of

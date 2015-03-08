@@ -3,7 +3,7 @@ mgsv
 
 #Protocol = 0.36
 #HTTPS
-**NOTE** in the https request the Authorization field of the https header must contain {usertype}:{userid}:{usertoken} coded in Base64 as defined in the standard.
+**NOTE** in the https request the Authorization field of the https header must contain {usertype}:{userid}:{usertoken} coded in Base64 as defined in the standard. You also need ProtocolVersion in the header
 
 **URL:**  debts/{id}
 ##

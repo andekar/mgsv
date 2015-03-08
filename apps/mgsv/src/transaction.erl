@@ -75,6 +75,8 @@ to_proplist(User, Userdata) ->
     case Userdata#user_data.protocol of
         "0.36" ->
             to_proplist_36(User);
+        "0.37" ->
+            to_proplist_36(User);
         _ ->
             to_proplist_old(User)
     end.
@@ -127,13 +129,23 @@ org_transaction_to_proplist(OrgDebt) ->
      [{?CURRENCY, OrgDebt#org_transaction.currency},
       {?AMOUNT, OrgDebt#org_transaction.amount}]}].
 
+from_proplist({?TRANSACTION, List}, UD) ->
+    from_proplist(List,UD);
 from_proplist(List,Userdata) ->
-    case Userdata#user_data.protocol of
-        "0.36" ->
-            from_proplist36(List, Userdata#user_data.user);
-        _ ->
-            from_proplist_old(List, Userdata#user_data.user)
-    end.
+    T = case Userdata#user_data.protocol of
+            "0.36" ->
+                from_proplist36(List, Userdata#user_data.user);
+            "0.37" ->
+                from_proplist36(List, Userdata#user_data.user);
+            _ ->
+                from_proplist_old(List, Userdata#user_data.user)
+        end,
+    validate(T).
+
+validate(#transaction{} =T) ->
+    T; %%TODO
+validate(Other) ->
+    Other.
 
 from_proplist36(List, #user{} = ReqBy) ->
     check_for_missing_fields(
@@ -187,6 +199,8 @@ from_proplist36(T, [{?UUID, UUid}|Rest]) ->
 from_proplist36(T, [{?SERVER_TIMESTAMP, ServerTimestamp}|Rest]) ->
     from_proplist36(T#transaction{server_timestamp = ServerTimestamp}, Rest);
 from_proplist36(T, [{?ORG_DEBT, OrgDebt}|Rest]) ->
+    from_proplist36(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
+from_proplist36(T, [{?ORG_TRANSACTION, OrgDebt}|Rest]) ->
     from_proplist36(T#transaction{org_transaction = org_transaction_from_proplist(T#transaction.org_transaction, OrgDebt)}, Rest);
 from_proplist36(T, [{?ECHO_UUID, _}|Rest]) ->
     from_proplist36(T,Rest);

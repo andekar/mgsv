@@ -2,14 +2,15 @@
 
 -export([content_types_provided/2, content_types_accepted/2,
          init/1, allowed_methods/2, from_json/2, to_html/2,
-         is_authorized/2, delete_resource/2, delete_completed/2,
-         process_post/2, resource_exists/2, malformed_request/2]).
+         delete_resource/2, delete_completed/2,
+         process_post/2, resource_exists/2, malformed_request/2,
+         service_available/2
+        ]).
 
 -include_lib("webmachine/include/webmachine.hrl").
 
 -include("payapp.hrl").
 -include("common.hrl").
-
 init(_Config) ->
     {ok, []}.
 
@@ -23,99 +24,176 @@ content_types_provided(ReqData, Context) ->
 content_types_accepted(RD, Ctx) ->
     {[{"application/json", from_json}, {"text/html", to_html}], RD, Ctx}.
 
-resource_exists(ReqData, Context) ->
-    case { ReqData#wm_reqdata.method
-         , wrq:path_tokens(ReqData)
-         , ReqData#wm_reqdata.scheme} of
-        {'PUT', ["users"], https} ->
+%% service only available for https
+service_available(ReqData, Context) ->
+    case ReqData#wm_reqdata.scheme of
+        https ->
             {true, ReqData, Context};
-        {'GET', ["users"|_More], https} ->
-            {true, ReqData, Context};
-        {'POST', ["users"|_More], https} ->
-            {true, ReqData, Context};
-
-        {'DELETE', ["debts", _Id], https} ->
-            {true, ReqData, Context};
-        {'PUT', ["debts"], https} ->
-            {true, ReqData, Context};
-        {'GET', ["debts"], https} ->
-            {true, ReqData, Context};
-
-        {'DELETE', ["transactions", _Id], https} ->
-            {true, ReqData, Context};
-        {'POST', ["transactions"], https} ->
-            {true, ReqData, Context};
-        {'GET', ["transactions"|_ToFrom], https} ->
-            {true, ReqData, Context};
-        {'GET', ["countries"], https} ->
-            {true, ReqData, Context};
-        {'GET', ["country", _CountryCode], https} ->
-            {true, ReqData, Context};
-        {'GET', ["rates"], https} ->
-            {true, ReqData, Context};
-        {'GET', ["rate", _CountryCode], https} ->
-            {true, ReqData, Context};
-
-        {'POST', ["ios_token"], https} ->
-            {true, ReqData, Context};
-        {'POST', ["android_token"], https} ->
-            {true, ReqData, Context};
-        {'DELETE', ["android_token", _Badge], https} ->
-            {true, ReqData, Context};
-        {'DELETE', ["ios_token", _Badge], https} ->
-            {true, ReqData, Context};
-
-        {Method, Path, https} ->
-            lager:alert("request denied method ~p path ~p", [Method, Path]),
-            {false, ReqData, Context};
-        _ -> {false, ReqData, Context} %% we do not want to change http version now
-    end.
-
-malformed_request(ReqData, Context) ->
-    case {ReqData#wm_reqdata.method, ReqData#wm_reqdata.scheme} of
-        {'POST', https} ->
-            case request_data(wrq:req_body(ReqData)) of
-                [] -> {true, ReqData, Context};
-                Json ->
-                    {false, ReqData, [{json, Json}| Context]}
-            end;
-        {'PUT', https} ->
-            case request_data(wrq:req_body(ReqData)) of
-                [] -> {true, ReqData, Context};
-                Json ->
-                    {false, ReqData, [{json, Json}| Context]}
-            end;
-        {'GET', https} ->
-            {false, ReqData, Context};
-        {'DELETE', https} ->
-            {false, ReqData, Context};
-        {_, http} ->
+        _ ->
             {false, ReqData, Context}
     end.
 
+resource_exists(ReqData, Context) ->
+    case { ReqData#wm_reqdata.method
+         , wrq:path_tokens(ReqData)} of
+        {'PUT', ["users"]} ->
+            {true, ReqData, Context};
+        {'GET', ["users"|_More]} ->
+            {true, ReqData, Context};
+        {'POST', ["users"|_More]} ->
+            {true, ReqData, Context};
+
+        {'DELETE', ["debts", _Id]} ->
+            {true, ReqData, Context};
+        {'PUT', ["debts"]} ->
+            {true, ReqData, Context};
+        {'GET', ["debts"]} ->
+            {true, ReqData, Context};
+
+        {'DELETE', ["transactions", _Id]} ->
+            {true, ReqData, Context};
+        {'POST', ["transactions"]} ->
+            {true, ReqData, Context};
+        {'GET', ["transactions"|_ToFrom]} ->
+            {true, ReqData, Context};
+        {'GET', ["countries"]} ->
+            {true, ReqData, Context};
+        {'GET', ["country", _CountryCode]} ->
+            {true, ReqData, Context};
+        {'GET', ["rates"]} ->
+            {true, ReqData, Context};
+        {'GET', ["rate", _CountryCode]} ->
+            {true, ReqData, Context};
+
+        {'POST', ["ios_token"]} ->
+            {true, ReqData, Context};
+        {'POST', ["android_token"]} ->
+            {true, ReqData, Context};
+        {'DELETE', ["android_token", _Badge]} ->
+            {true, ReqData, Context};
+        {'DELETE', ["ios_token", _Badge]} ->
+            {true, ReqData, Context};
+
+        {Method, Path} ->
+            lager:alert("request denied method ~p path ~p", [Method, Path]),
+            {false, ReqData, Context}
+    end.
+
+%% at this stage there has been no authorization
+%% but we still have the "to be authorized" data
+malformed_request(OReqData, Context) ->
+
+    %% we need to be authorized a bit earlier than what is usual..
+    {Authorized, ReqData, NewCtx} = is_authorized(OReqData, Context),
+
+    [{userdata, UD}] = proplists:lookup_all(userdata, NewCtx),
+    lager:info("logged in as ~p", [UD]),
+    Path = wrq:path_tokens(ReqData),
+    lager:info("Request at path ~p", [Path]),
+    Method = ReqData#wm_reqdata.method,
+    case {Authorized, UD} of
+        {true, #user_data{ protocol = undefined}} ->
+            {true, ReqData, Context};
+        {true, #user_data{}} when Method == 'POST' orelse
+                                  Method == 'PUT' ->
+            case request_data(Method, Path, wrq:req_body(ReqData), UD) of
+                [] ->
+                    {true, ReqData, Context};
+                Json ->
+                    lager:info("request ~p~n~n", [Json]),
+                    {false, ReqData, [{json, Json}| NewCtx]}
+            end;
+        {true, #user_data{}} ->
+            {false, ReqData, NewCtx};
+        {true,_} ->
+            {true, ReqData, Context};
+        _ ->
+            {{halt, 401}, ReqData, Context}
+
+    end.
+
+validate_req('POST', ["users"|_], Data, UD) ->
+    case catch lists:map(fun(V) ->
+                                 users:from_proplist(V, UD) end,
+                                Data) of
+        [#user{}|_] ->
+            Data;
+        E ->
+            lager:error("Failed to unpack data ~p", [E]),
+            []
+    end;
+validate_req('PUT', ["users"], Data, UD) ->
+    case UD#user_data.user of
+        U = #user{} ->
+            case catch users:update_parts(Data, U, UD) of
+                #user{} ->
+                    Data;
+                E ->
+                    lager:error("failed to change ~p", [E]),
+                    []
+            end;
+        _ ->
+            lager:error("failed to change"),
+            []
+    end;
+validate_req('POST', ["transactions"], Data, UD) ->
+    case catch lists:map(fun(T) ->
+                                 transaction:from_proplist(T, UD) end,
+                         Data) of
+        [#transaction{}|_] ->
+            Data;
+        E ->
+            lager:error("failed to change ~p", [E]),
+            []
+    end;
+validate_req('POST', ["ios_token"], Data, _UD) ->
+    case Data of
+       [{?IOS_TOKEN, _Token}] ->
+            Data;
+        E  ->
+            lager:error("failed to change ~p", [E]),
+            []
+    end;
+validate_req('POST', ["android_token"], Data, _UD) ->
+    case Data of
+       [{?ANDROID_TOKEN, _Token}] ->
+            Data;
+        E  ->
+            lager:error("failed to change ~p", [E]),
+            []
+    end;
+validate_req('PUT', ["debts"], Data, _UD) ->
+    case {proplists:lookup_all(?OLD_UID, Data),
+          proplists:lookup_all(?NEW_UID, Data)} of
+        {[{?OLD_UID,_}],[{?NEW_UID,_}]} ->
+            Data;
+        E ->
+            lager:error("failed to change ~p", [E]),
+            []
+    end;
+
+validate_req(_Method, _Path, Data, _UD) ->
+    lager:info("returning data ~p~n",[Data]),
+    Data.
+
 
 process_post(ReqData, Context) ->
-    Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
     Any = wrq:req_body(ReqData),
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}]  = proplists:lookup_all(json, Context),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
-    Reply =
-        case Scheme of
-            https ->
-                error_logger:info_msg("~p ~p ~p ~p ~p", [Method, Url, Any, UD, Scheme]),
-                try
-                    {ok, Result} = mgsv_server:send_message({Method, UD,
-                                                             Url, Decoded, Scheme}),
-                    Result
-                catch
-                    _:Error ->
-                        lager:alert("CRASH ~p~n~p~n", [Error, erlang:get_stacktrace()]),
-                        mochijson2:encode([[{error,request_failed}]])
-                end;
-            _ -> mochijson2:encode([[{error, user_not_authenticated}]])
-        end,
+    error_logger:info_msg("~p ~p ~p ~p", [Method, Url, Any, UD]),
+    Reply = try
+                {ok, Result} = mgsv_server:send_message({Method, UD,
+                                                         Url, Decoded}),
+                Result
+            catch
+                _:Error ->
+                    lager:alert("CRASH ~p~n~p~n", [Error, erlang:get_stacktrace()]),
+                    mochijson2:encode([[{error,request_failed}]])
+            end,
+
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
     error_logger:info_msg("REPLY ~s",[HBody]),
     {true, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(HBody, ReqData)), Context}.
@@ -123,13 +201,11 @@ process_post(ReqData, Context) ->
 delete_resource(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     Method = ReqData#wm_reqdata.method,
-    Scheme = ReqData#wm_reqdata.scheme,
 
     lager:info("~p ~p", [Method, Url]),
-%    {_UserType, _UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
     case catch mgsv_server:send_message({Method, UD,
-                                         Url, Scheme}) of
+                                         Url}) of
         ok -> {true, ReqData, Context};
         {'EXIT', Error} ->
             lager:alert("CRASH ~p~n~p", [Error, erlang:get_stacktrace()]),
@@ -142,7 +218,6 @@ delete_completed(ReqData, Context) ->
     {true, ReqData, Context}.
 
 from_json(ReqData, Context) ->
-    Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}] = proplists:lookup_all(json, Context),
@@ -150,7 +225,7 @@ from_json(ReqData, Context) ->
     SReply = try
                 error_logger:info_msg("~p ~p ~p", [Method, Url, Decoded]), %
                 mgsv_server:send_message({Method, Ud,
-                                          Url, Decoded, Scheme})
+                                          Url, Decoded})
             catch
                 _:TheError ->
                     lager:alert("CRASH ~p~n~p", [TheError, erlang:get_stacktrace()]),
@@ -167,26 +242,17 @@ from_json(ReqData, Context) ->
     end.
 
 to_html(ReqData, Context) ->
-    Scheme = ReqData#wm_reqdata.scheme,
     Method = ReqData#wm_reqdata.method,
-    {Body, _RD, Ctx2} =
-        case {wrq:path_tokens(ReqData), Scheme} of
-            {_Any, http} ->
-                Result = "Operation not allowed",
-                {Result, ReqData, Context};
-            {Any, https} ->
-                error_logger:info_msg("~p ~p",[Method, Any]),
-%                {_UserType, UserId, _Token} = user_from_auth(wrq:get_req_header("authorization", ReqData)),
-                [{userdata, UD}] = proplists:lookup_all(userdata, Context),
-                {ok, Result} = try mgsv_server:send_message({Method, UD,
-                                                             Any, Scheme})
-                               catch
-                                   _:Err ->
-                                       lager:alert("CRASH ~p~n~p", [Err, erlang:get_stacktrace()]),
-                                       {ok, mochijson2:encode([[{error,request_failed}]])}
-                               end,
-                {Result, ReqData, Context}
-        end,
+    Any = wrq:path_tokens(ReqData),
+    error_logger:info_msg("~p ~p",[Method, Any]),
+    [{userdata, UD}] = proplists:lookup_all(userdata, Context),
+    {ok, Body} = try mgsv_server:send_message({Method, UD,
+                                               Any})
+                 catch
+                     _:Err ->
+                         lager:alert("CRASH ~p~n~p", [Err, erlang:get_stacktrace()]),
+                         {ok, mochijson2:encode([[{error,request_failed}]])}
+                 end,
     case wrq:path_tokens(ReqData) of
         ["countries"] ->
             error_logger:info_msg("REPLY {\"NZD\":\"New Zealand Dollar....");
@@ -196,58 +262,65 @@ to_html(ReqData, Context) ->
     end,
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
-    {HBody, ReqData, Ctx2}.
+    {HBody, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    Scheme = ReqData#wm_reqdata.scheme,
     UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
     ExpectedProtocol = wrq:get_req_header("protocolversion", ReqData),
-    case {Scheme, ExpectedProtocol} of
-        {_, undefined} ->
-            {false, ReqData, Context};
-        {https,_} ->
-            %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
-            {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
-                                                   {true,Vars};
-                                              (V,{true,{O,_}}) ->
-                                                   {false,{O,V}};
-                                              ("Darwin", {B,{_,V}})->
-                                                   {B,{ios,V}};
-                                              (_, {false,Vars}) ->
-                                                   {false,Vars}
-                                           end,
-                                           {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
-            UD = #user_data{os = Os,
+    %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
+    {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
+                                           {true,Vars};
+                                      (V,{true,{O,_}}) ->
+                                           {false,{O,V}};
+                                      ("Darwin", {B,{_,V}})->
+                                           {B,{ios,V}};
+                                      (_, {false,Vars}) ->
+                                           {false,Vars}
+                                   end,
+                                   {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
+    lager:info("Got user-agent OS ~p Version ~p Protocol ~p~n~p~n",
+               [Os,Version,ExpectedProtocol, UserAgent]),
+    UD = case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
+             {UserType, UserId, Token} ->
+                 BinUId = list_to_binary(UserId),
+                 BinToken = list_to_binary(Token),
+                 #user_data{os = Os,
                             version = Version,
-                            protocol = ExpectedProtocol
-                           },
-            lager:info("Got user-agent OS ~p Version ~p Protocol ~p~n~p~n",[Os,Version,ExpectedProtocol, UserAgent]),
-            case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
-                {"debug", UserId, _Token} ->
-                    BinUserId = list_to_binary(UserId),
-                    UDU = UD#user_data{ username = BinUserId,
-                                        user_type = <<"debug">>},
-                    {true, ReqData, [{userdata, UDU}|Context]};
-                {UserType, UserId, Token} ->
-                    BinUserId = list_to_binary(UserId),
-                    UDU = UD#user_data{ username = BinUserId,
-                                        user_type = list_to_binary(UserType)},
-                    lager:info("Request from ~p",[UserId]),
-                    case validate_user:validate(list_to_binary(Token), BinUserId, list_to_binary(UserType)) of
-                        {BinUserId, Id} ->
-                            {true, ReqData, [{userdata, UDU#user_data{id = Id}}|Context]};
-                        {BinUserName, BinUserId} ->
-                            {true, ReqData, [{userdata, UDU#user_data{id = BinUserId,
-                                                                     username = BinUserName}}|Context]};
-                        Res ->
-                            lager:alert("Access denied authorization field, usertype ~p userid ~p  res ~p", [UserType, UserId, Res]),
-                            {"Basic realm=webmachine", ReqData, Context}
-                    end;
-                Any ->
-                    lager:alert("Access denied authorization field: ~p", [Any]),
+                            protocol = ExpectedProtocol,
+                            username = BinUId,
+                            id = BinToken,
+                            user_type = list_to_binary(UserType),
+                            user = users:get(BinUId) % maybe a bit too early
+                           };
+             _ ->
+                 malformed_error
+         end,
+
+
+    IsTestServer = case application:get_env(mgsv, test_server) of
+                       {ok, Bool} ->
+                           Bool;
+                       _ ->
+                           false
+                   end,
+    ECtx = proplists:delete(userdata, Context),
+    BinUserId = UD#user_data.username,
+    case UD#user_data.user_type of
+        <<"debug">> when IsTestServer ->
+            {true, ReqData, [{userdata, UD}|ECtx]};
+        UT -> %% note we have hidden the key token in user_data.id
+            case validate_user:validate(UD#user_data.id, BinUserId, UT) of
+                {BinUserId, Id} ->
+                    {true, ReqData, [{userdata, UD#user_data{id = Id}}|
+                                     ECtx]};
+                {BinUserName, BinUserId} ->
+                            {true, ReqData, [{userdata, UD#user_data{id = BinUserId,
+                                                                     username = BinUserName}}|
+                                             ECtx]};
+                Res ->
+                    lager:alert("Access denied authorization field, userdata ~p res ~p", [UD#user_data{id = hidden}, Res]),
                     {"Basic realm=webmachine", ReqData, Context}
-            end;
-        _ -> {false, ReqData, Context}
+            end
     end.
 
 destructify(List) when is_list(List)->
@@ -271,8 +344,10 @@ user_from_auth("Basic" ++ Base64) ->
 user_from_auth(_) ->
     {error, wrong_format}.
 
-request_data(Data) ->
-    try lists:flatten(destructify(mochijson2:decode(Data)))
+request_data(Method, Path, Data, UD) ->
+    try T = lists:flatten(destructify(mochijson2:decode(Data))),
+          lager:info("Got data ~p~n~n", [T]),
+          validate_req(Method,Path,T, UD)
     catch
         _:Errors ->
             lager:alert("CRASH when decoding json ~p~n~p~nData: ~p", [Errors, erlang:get_stacktrace()

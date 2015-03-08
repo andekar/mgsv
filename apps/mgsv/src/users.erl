@@ -11,13 +11,14 @@
          get/1,
          delete/1,
          update/2,
-         update_parts/2,
+         update_parts/3,
          to_proplist/2,
          count_by_usertype/1,
          users_by_type/1,
          update_find/1,
          from_proplist/2,
-         update_remove_usermapping/2
+         update_remove_usermapping/2,
+         find_null_users/0
         ]).
 
 -record(user_mapping,
@@ -240,6 +241,25 @@ create_usertable() ->
                           {attributes, record_info(fields,user_info)}]),
     lager:info("Trying to create user table with result ~p", [Res]).
 
+update_parts(Data, User, Userdata) ->
+    NewUser = case Userdata#user_data.protocol of
+                  "0.37" ->
+                      [{?USER, ExtractedData}] = Data,
+                      update_parts_37(ExtractedData, User);
+                  _ -> update_parts(Data, User)
+              end,
+    validate_user(NewUser).
+
+update_parts_37([], User) ->
+    User;
+update_parts_37([{?DISPLAYNAME, DisplayName}|Rest], User) ->
+    update_parts_37(Rest, User#user{displayname = DisplayName});
+update_parts_37([{?CURRENCY, CURRENCY}|Rest], User) ->
+    update_parts_37(Rest, User#user{currency = CURRENCY});
+update_parts_37([NotSupported|_Rest], _User) ->
+    lager:error("Users.erl: Not supported variable ~p", [NotSupported]),
+    unsupported_variable.
+
 %% to keep up to old API
 update_parts([], User) ->
     User;
@@ -250,12 +270,14 @@ update_parts([{?DISPLAYNAME, DisplayName}|Rest], User) ->
 update_parts([{?CURRENCY, Currency}|Rest], User) ->
     update_parts(Rest, User#user{currency = Currency});
 update_parts([NotSupported|Rest], User) ->
-    lager:info("Users.erl: Not supported variable ~p", [NotSupported]),
+    lager:error("Users.erl: Not supported variable ~p", [NotSupported]),
     update_parts(Rest, User).
 
 to_proplist(User, Userdata) ->
     case Userdata#user_data.protocol of
         "0.36" ->
+            to_proplist_36(User);
+        "0.37" -> %% same format here as 0.36
             to_proplist_36(User);
         _ ->
             to_proplist_old(User)
@@ -283,14 +305,18 @@ to_proplist_old(User) ->
      {<<"currency">>, User#user.currency},
      {<<"server_timestamp">>, User#user.user_edit_details#edit_details.last_change}].
 
+from_proplist({?USER, List}, Userdata) ->
+    from_proplist(List, Userdata);
 from_proplist(List, Userdata) ->
     Uuid = common:binary_uuid(),
     User = #user{
               uid = Uuid,
               username = Uuid
              },
-    UUser = case Userdata#user_data.protocol of
+    FUser = case Userdata#user_data.protocol of
                 "0.36" ->
+                    from_proplist36(User, List);
+                "0.37" ->
                     from_proplist36(User, List);
                 _ ->
                     from_proplist_old(User#user{
@@ -298,11 +324,15 @@ from_proplist(List, Userdata) ->
                                         currency  = ?SWEDISH_CRONA
                                        }, List)
             end,
-    CU = case {Userdata#user_data.user, Userdata#user_data.id} of
-             {no_such_user,Userid} when Userid == UUser#user.uid ->
-                 UUser;
-             {U, _} ->
-                 U
+    {UUser, CU} = case {Userdata#user_data.user, Userdata#user_data.id} of
+                      {no_such_user,Userid} when Userid == FUser#user.uid,
+                                                 FUser#user.user_type == ?GMAIL_USER ->
+                          NUser = FUser#user{ username = Userdata#user_data.username},
+                          {NUser, NUser}; %% create self
+                      {no_such_user,Userid} when Userid == FUser#user.uid ->
+                          {FUser, FUser}; %% create self
+                      {U, _} ->
+                          {FUser, U}
          end,
     UserEditDetails =
         common:mod_edit_details(
@@ -326,11 +356,10 @@ validate_user(User =
                          currency = Currency
                        }) ->
     Errors = case Username of
-                 <<"">> ->
-                     [{error, empty_username}];
                  undefined ->
                      [{error, undefined_username}];
-                 _ -> []
+                 _ ->
+                     check_non_empty(empty_username, Username)
              end,
     Errors1 = case UserType of
                   ?GMAIL_USER ->
@@ -345,10 +374,8 @@ validate_user(User =
     Errors2 = case Displayname of
                   undefined ->
                       [{error, unknown_displayname}|Errors1];
-                  <<"">> ->
-                      [{error, empty_displayname}|Errors1];
                   _ ->
-                      Errors1
+                      Errors1 ++ check_non_empty(empty_displayname, Displayname)
               end,
     Currencies = exchangerates_server:countries(),
     Errors3 = case proplists:get_value(Currency, Currencies) of
@@ -366,6 +393,13 @@ validate_user(User =
 validate_user(Other) ->
     [{error, Other}].
 
+check_non_empty(Item, BinStr) ->
+    case size(BinStr) of
+        0 ->
+            [{error, Item}];
+        _ -> []
+    end.
+
 
 from_proplist36(User, []) ->
     User;
@@ -376,12 +410,14 @@ from_proplist36(User, [{?DISPLAYNAME, Displayname}| Rest]) ->
     from_proplist36(User#user{displayname = Displayname}, Rest);
 from_proplist36(User, [{?USER_TYPE, UserType}| Rest]) ->
     from_proplist36(User#user{user_type = UserType}, Rest);
+from_proplist36(User, [{<<"user_type">>, UserType}| Rest]) ->
+    from_proplist36(User#user{user_type = UserType}, Rest);
 from_proplist36(User, [{?CURRENCY,Currency}| Rest]) ->
     from_proplist36(User#user{currency = Currency}, Rest);
 from_proplist36(T, [{?ECHO_UUID, _}|Rest]) ->
     from_proplist36(T,Rest);
 from_proplist36(_User, [Illegal| _Rest]) ->
-    lager:info("unsupported transaction variable ~p~n",[Illegal]),
+    lager:error("unsupported transaction variable ~p~n",[Illegal]),
     unsupported_variable.
 
 from_proplist_old(User, []) ->
@@ -400,3 +436,15 @@ from_proplist_old(User, [{?USER,Displayname}|Rest]) ->
 from_proplist_old(_User, [Illegal| _Rest]) ->
     lager:info("unsupported transaction variable ~p~n",[Illegal]),
     unsupported_variable.
+
+find_null_users() ->
+    mnesia:transaction(
+      fun() ->
+              mnesia:foldl(fun(#user_info{displayname = DisplayName,
+                                          internal_uid = IntUid}, Acc) ->
+                                   case DisplayName of
+                                       <<>> ->
+                                           [IntUid| Acc];
+                                       _ -> Acc
+                                   end
+                           end,[],user_info) end).

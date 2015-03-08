@@ -20,7 +20,7 @@ send_message(Message) ->
     gen_server:call(?MODULE, Message).
 
 %% delete requests
-handle_call({'DELETE', Ud, [Path, StrId], https}, _From, State) ->
+handle_call({'DELETE', Ud, [Path, StrId]}, _From, State) ->
     Userdata = users:update_find(Ud),
     Id = list_to_binary(StrId),
     case Path of
@@ -41,7 +41,7 @@ handle_call({'DELETE', Ud, [Path, StrId], https}, _From, State) ->
     end;
 
 %%updates
-handle_call({'PUT', Ud, Path, Props, https}, _From, State) ->
+handle_call({'PUT', Ud, Path, Props}, _From, State) ->
     Userdata = users:update_find(Ud),
     case Path of
         ["users"] -> %% currently we only support change username
@@ -61,7 +61,7 @@ handle_call({'PUT', Ud, Path, Props, https}, _From, State) ->
     end;
 
 %%creations
-handle_call({'POST', Ud, Path, Props, https}, _From, State) ->
+handle_call({'POST', Ud, Path, Props}, _From, State) ->
     Userdata = users:update_find(Ud),
     case Path of
         ["users"] -> %%We should return the created user(s)
@@ -96,14 +96,36 @@ handle_call({'POST', Ud, Path, Props, https}, _From, State) ->
     end;
 
 %return res
-handle_call({'GET', Ud, Path, https}, _From, State) ->
+handle_call({'GET', Ud, Path}, _From, State) ->
     case Path of
         ["countries"] ->
-            {reply, {ok, mochijson2:encode(exchangerates_server:countries())}, State};
+            Countries = exchangerates_server:countries(),
+            case Ud#user_data.protocol of
+                "0.37" ->
+                    Structified = lists:map(fun({Short, Long}) ->
+                                                    ?JSONSTRUCT([{<<"country">>,
+                                                                     [{<<"country_code">>, Short},
+                                                                      {<<"country_name">>, Long}]}])
+                                            end, Countries),
+                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                _ ->
+                    {reply, {ok, mochijson2:encode(Countries)}, State}
+            end;
         ["country", CountryCode] ->
             {reply, {ok, mochijson2:encode([exchangerates_server:country(list_to_binary(CountryCode))])}, State};
         ["rates"] ->
-            {reply, {ok, mochijson2:encode(exchangerates_server:rates())}, State};
+            Rates = exchangerates_server:rates(),
+            case Ud#user_data.protocol of
+                "0.37" ->
+                    Structified = lists:map(fun({Short, Rate}) ->
+                                                    ?JSONSTRUCT([{<<"exchange_rate">>,
+                                                                     [{<<"country_code">>, Short},
+                                                                      {<<"rate">>, Rate}]}])
+                                            end, Rates),
+                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                _ ->
+                    {reply, {ok, mochijson2:encode(Rates)}, State}
+            end;
         ["rate", CountryCode] ->
             {reply, {ok, mochijson2:encode([exchangerates_server:rate(list_to_binary(CountryCode))])}, State};
         ["users"|Uids] ->

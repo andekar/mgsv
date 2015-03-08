@@ -136,38 +136,10 @@
 %% currency, this one is mandatory
 -define(ORG_DEBT, <<"org_debt">>).
 -define(ORG_DEBT(Data), {?ORG_DEBT, Data}).
+-define(ORG_TRANSACTION, <<"org_transaction">>).
 
 -define(CLIENT_VERSION, <<"client_version">>).
 -define(CLIENT_OS, <<"client_os">>).
-
-%% contains currency and amount of the registered
-%% currency, this one is not mandatory
-%-define(REG_DEBT, <<"reg_debt">>).
-%-define(REG_DEBT(Data), {?REG_DEBT, Data}).
-
-%% {Uuid, [{?APPROVED_DEBTS, [Uids]}, {?NOT_APPROVED_DEBTS, [{Uid, [{approved_by|not_approved_by, Uid}]}|...]}] }
-%% That is Uuid = userid, Uids = debt_ids
--define(DEBT_APPROVAL_TRANSACTIONS, debt_approval_transactions).
--define(DEBT_APPROVAL_TRANSACTIONS(Props), proplists:get_value(?DEBT_APPROVAL_TRANSACTIONS, Props)).
-
--define(APPROVED_DEBTS, approved_debts).
--define(APPROVED_DEBTS(Props), proplists:get_value(?APPROVED_DEBTS, Props, [])).
-
-%% the debt transaction contains
-%% {Uuid, Proplist}
-%% Where Proplist contains
-%% {?UUID, Uuid}  - a unique id for this debt, this is also the key
-%% {?UID1, Uid1} - userid of the first person in this transaction
-%% {?UID2, Uid2} - userid of the second person in this transaction
-%% {?TIMESTAMP, TimeStamp} - the given timestamp, if none is provided then ServerTimeStamp
-%% {?SERVER_TIMESTAMP, ServerTimeStamp} - the timestamp when the transaction was synced
-%% {?REASON, Reason} - The reason of the transaction
-%% {?AMOUNT, Amount} - The Amount in the transaction
-%% {?CURRENCY, Currency} - The currency of amount
-%% {?ORG_CURRENCY, Currency} - the original currency
-%% {?ORG_AMOUNT, OrgAmount} - the amount in the original currency
--define(DEBT_TRANSACTIONS, debt_transactions).
--define(DEBT_TRANSACTIONS(Props), proplists:get_value(?DEBT_TRANSACTIONS, Props, [])).
 
 %% to lower and check @
 -define(UID_TO_LOWER(User), list_to_binary(string:to_lower(binary_to_list(User)))).

@@ -103,7 +103,7 @@ handle_call(d_local_users, _From, State) ->
 handle_call({change_userinfo, Ud, UserInfo}, _From, State) ->
     case Ud#user_data.user of
         User = #user{} ->
-            UUser = users:update_parts(UserInfo, User),
+            UUser = users:update_parts(UserInfo, User, Ud),
             users:update(UUser, User),
             {reply, [users:to_proplist(UUser, Ud)], State};
         Other ->
@@ -193,20 +193,20 @@ handle_call({add, Ud, Struct}, _From, State) ->
 handle_call({delete_debt, Userdata, Uuid}, _From, State) ->
     Transaction = transaction:get({transaction_id, Uuid}),
     ReqByU = Userdata#user_data.user,
-    ReqBy = ReqByU#user.username,
+    ReqByIU = ReqByU#user.internal_uid,
     case Transaction of
         [#transaction{} = T] ->
             %crash if reqby is not one of the uids in the debt
 
-            ok = case {T#transaction.paid_by_username,
-                       T#transaction.paid_for_username} of
-                     {ReqBy, _} -> ok;
-                     {_ , ReqBy} -> ok;
+            ok = case {T#transaction.paid_by,
+                       T#transaction.paid_for} of
+                     {ReqByIU, _} -> ok;
+                     {_ , ReqByIU} -> ok;
                      _ -> {error, requestby_not_part_of_transaction}
                  end,
             transaction:delete(T),
             debt:delete(T, ReqByU),
-            lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqBy]);
+            lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqByIU]);
         %% below shows something corrupt action should be taken
         [{_Uuid, _Items} | _More] = List -> lager:info("ERROR delete_debt ~p", [List]);
         _ -> ok
