@@ -102,6 +102,8 @@ update_find(Userdata = #user_data{}) ->
                         update_remove_usermapping(U1, UU1),
                         UU1
                 end;
+            #user{ uid = Id, user_type = ?FACEBOOK_USER } = U3 -> %% fb does not give username any more
+                U3;
             #user{} = U2 ->
                 lager:error("Something is wrong, user might have changed username ~p~n~p~n", [U2, Userdata]),
                 no_such_user;

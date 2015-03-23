@@ -100,15 +100,14 @@ handle_call(d_local_users, _From, State) ->
     {reply, users(?LOCAL_USER), State};
 
 %%TODO fix transaction
-handle_call({change_userinfo, Ud, UserInfo}, _From, State) ->
+handle_call({change_userinfo, Ud, UUser}, _From, State) ->
     case Ud#user_data.user of
         User = #user{} ->
-            UUser = users:update_parts(UserInfo, User, Ud),
             users:update(UUser, User),
             {reply, [users:to_proplist(UUser, Ud)], State};
         Other ->
             lager:error("Tried changing username got ~p from db Ud ~p Un ~p"
-                       , [Other, Ud, UserInfo]),
+                       , [Other, Ud, UUser]),
             {reply, [], State}
         end;
 
@@ -143,10 +142,8 @@ handle_call({get_usernames, Uids, Userdata}, _From, State) ->
               end, RecUsers),
     {reply, RetUsers, State};
 
-handle_call({add, Ud, Struct}, _From, State) ->
-    EchoUuid = proplists:lookup_all(?ECHO_UUID, Struct),
+handle_call({add, Ud, {EchoUuid,Transaction}}, _From, State) ->
     ReqBy = Ud#user_data.user,
-    Transaction = transaction:from_proplist(Struct, Ud),
 
     lager:info("transaction ~p~n",[Transaction]),
     User1 = users:get({internal_uid, Transaction#transaction.paid_by}),
@@ -213,9 +210,8 @@ handle_call({delete_debt, Userdata, Uuid}, _From, State) ->
     end,
     {reply, ok, State};
 
-handle_call({register, UserInfo, Ud}, _From, State) ->
-    EchoUuid = proplists:lookup_all(?ECHO_UUID, UserInfo),
-    case users:from_proplist(UserInfo, Ud) of
+handle_call({register, {EchoUuid, UserInfo}, Ud}, _From, State) ->
+    case UserInfo of
         RetUsr = #user{} ->
             case users:add(RetUsr, Ud) of
                 user_already_exist ->

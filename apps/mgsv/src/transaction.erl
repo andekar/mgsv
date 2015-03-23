@@ -296,7 +296,7 @@ org_transaction_from_proplist(O, [{?CURRENCY, Currency}|Rest]) ->
 org_transaction_from_proplist(O, [{?AMOUNT, Amount}|Rest]) ->
     org_transaction_from_proplist(O#org_transaction{ amount = Amount}, Rest);
 org_transaction_from_proplist(T, [Any|Rest]) ->
-    lager:info("unsupported transaction.org_transaction variable ~p~n",[Any]),
+    lager:error("unsupported transaction.org_transaction variable ~p~n",[Any]),
     org_transaction_from_proplist(T,Rest).
 
 check_for_missing_fields(#transaction{paid_by = undefined}) ->

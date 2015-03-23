@@ -30,7 +30,7 @@ start_link() ->
                 lager:info("failed to aquire env mgsv id ~p",[Other])
         end,
     lager:info("Starting pay_push_notification"),
-    apns:connect(payapp, fun(Ab,Ba) -> error_logger:error_msg("Error ~p ~p", [Ab,Ba]) end, fun(Arg) -> error_logger:info_msg("error ~p~n~n",[Arg]), remove_ios_token(Arg) end),
+    apns:connect(payapp, fun(Ab,Ba) ->lager:error("Error ~p ~p", [Ab,Ba]) end, fun(Arg) -> error_logger:info_msg("error ~p~n~n",[Arg]), remove_ios_token(Arg) end),
     gcm:start(android,AndroidId),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -87,7 +87,7 @@ handle_call(All, _From, State) ->
 
 handle_cast({add_user_ios, Uuid, DevId}, #state{ios = IOS,
                                                 android = _Android} = State) ->
-    lager:info("~p Adding ios user ~p with deviceId ~p",[?MODULE, Uuid, DevId]),
+    lager:info("Adding ios user ~p with deviceId ~p",[Uuid, DevId]),
     case dets:lookup(IOS, Uuid) of
         Any when is_list(Any) ->
             case lists:any(fun({_Uuid, DevTok, _Count}) -> DevTok == DevId end, Any) of
@@ -100,7 +100,7 @@ handle_cast({add_user_ios, Uuid, DevId}, #state{ios = IOS,
 
 handle_cast({add_user_android, Uuid, DevId}, #state{ios = _IOS,
                                                     android = Android} = State) ->
-    lager:info("~p Adding android user ~p with UUid ~p", [?MODULE, Uuid, DevId]),
+    lager:info("Adding android user ~p with UUid ~p", [Uuid, DevId]),
     case dets:lookup(Android, Uuid) of
         Any when is_list(Any) ->
             case lists:any(fun({_Uuid, DevTok}) -> DevTok == DevId end, Any) of

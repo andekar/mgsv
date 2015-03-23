@@ -12,7 +12,7 @@
          terminate/2, code_change/3]).
 
 -define(GOOGLE_URL, "https://www.googleapis.com/oauth2/v1/userinfo?access_token=").
--define(FACEBOOK_URL, "https://graph.facebook.com/me?access_token=").
+-define(FACEBOOK_URL, "https://graph.facebook.com/v2.2/me?access_token=").
 -define(EMAIL, <<"email">>).
 -define(GMAIL_ID, <<"id">>).
 -define(FBUID, <<"username">>).
@@ -71,7 +71,7 @@ handle_cast(Msg, State) ->
     {noreply, State}.
 
 handle_info(trigger, State = [Tab]) ->
-    lager:info("clearing ets table with login info"),
+    lager:info("clearing ets table with login info",[]),
     ets:delete_all_objects(Tab),
     {noreply, State};
 
@@ -85,7 +85,7 @@ terminate(Reason, _State) ->
 
 code_change(OldVsn, State = [Tab], Extra) ->
     lager:info("UPGRADING VERSION validate_user ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
-    lager:info("clearing ets table with login info"),
+    lager:info("clearing ets table with login info",[]),
     ets:delete_all_objects(Tab),
     {ok, State}.
 
@@ -119,4 +119,4 @@ validate_facebook(Token) ->
     {ok, {{"HTTP/1.1",_ReturnCode, _State}, _Head, Body}}
         = httpc:request(Method, {URL, Header}, HTTPOptions, Options),
     {struct, List} = mochijson2:decode(Body),
-    {proplists:get_value(?FBUID, List), proplists:get_value(?FB_ID, List)}.
+    {proplists:get_value(?FB_ID, List), proplists:get_value(?FB_ID, List)}.

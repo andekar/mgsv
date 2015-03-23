@@ -66,23 +66,17 @@ handle_call({'POST', Ud, Path, Props}, _From, State) ->
     case Path of
         ["users"] -> %%We should return the created user(s)
             lager:info("Creating users: ~p", [Props]),
-            Users = proplists:lookup_all(?USER, Props),
-            UUsers = case Users of
-                         [{?USER, MaybeList} | _MaybeMore] when is_list(MaybeList)-> Users;
-                         _    -> [{?USER, Props}]
-                     end,
-            UUser = lists:map(fun({?USER, User}) ->
-                                      Res = pay_server:register_user(User, Userdata),
+            UUser = lists:map(fun(EchoAndUser) ->
+                                      Res = pay_server:register_user(EchoAndUser, Userdata),
                                       ?JSONSTRUCT([{?USER,Res}])
-                              end, UUsers),
+                              end, Props),
             {reply, {ok, mochijson2:encode(UUser)}, State};
         ["transactions"] ->
-            Transactions = proplists:lookup_all(?TRANSACTION, Props),
-            Reply = lists:map(fun({?TRANSACTION, Vars}) ->
-                                      lager:debug("Add debt: ~p", [Vars]),
-                                      Tmp = pay_server:add_debt({add,Userdata, Vars}),
+            Reply = lists:map(fun(EchoAndTransaction) ->
+                                      lager:debug("Add transaction: ~p", [EchoAndTransaction]),
+                                      Tmp = pay_server:add_debt({add,Userdata, EchoAndTransaction}),
                                       ?JSONSTRUCT([{?TRANSACTION,Tmp}])
-                              end, Transactions),
+                              end, Props),
             {reply, {ok, mochijson2:encode(Reply)}, State};
         ["android_token"] ->
             [{_,AndroidToken}] = proplists:lookup_all(?ANDROID_TOKEN, Props),
@@ -126,6 +120,21 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                 _ ->
                     {reply, {ok, mochijson2:encode(Rates)}, State}
             end;
+        ["crates"] ->
+            Rates = exchangerates_server:crates(), %{code, name, rate}
+            case Ud#user_data.protocol of
+                "0.37" ->
+                    Structified = lists:map(fun({Short, Long, Rate}) ->
+                                                    ?JSONSTRUCT([{<<"exchange_rate">>,
+                                                                     [{<<"country_code">>, Short},
+                                                                      {<<"country_name">>, Long},
+                                                                      {<<"rate">>, Rate}]}])
+                                            end, Rates),
+                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                _ ->
+                    {reply, {ok, mochijson2:encode(Rates)}, State}
+            end;
+
         ["rate", CountryCode] ->
             {reply, {ok, mochijson2:encode([exchangerates_server:rate(list_to_binary(CountryCode))])}, State};
         ["users"|Uids] ->
@@ -186,10 +195,9 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                                                 DT2 = proplists:get_value(?SERVER_TIMESTAMP, T2),
                                                 DT1 >= DT2 end,
                                         Filtered),
-
                     Return = lists:map(fun(List) ->
                                                ?JSONSTRUCT([?TRANSACTION(List)]) end,
-                                       lists:sublist(lists:nthtail(F, Sorted), T)),
+                                      my_sublist(Sorted, F, T)),
                     Return2 = mochijson2:encode(Return),
                     {reply, {ok, Return2}, State};
                 ["debts"] ->
@@ -220,3 +228,12 @@ terminate(Reason, _State) ->
 code_change(OldVsn, State, Extra) ->
     lager:debug("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, Extra]),
     {ok, State}.
+
+my_sublist(List,From,To) ->
+    F = From + 1, %1 indexed
+    case F > length(List) of
+        true ->
+            [];
+        _ ->
+            lists:sublist(List, F, To +1 - From)
+    end.

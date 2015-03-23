@@ -64,6 +64,8 @@ resource_exists(ReqData, Context) ->
             {true, ReqData, Context};
         {'GET', ["rate", _CountryCode]} ->
             {true, ReqData, Context};
+        {'GET', ["crates"]} -> %{countrycode, countryname, rate}
+            {true, ReqData, Context};
 
         {'POST', ["ios_token"]} ->
             {true, ReqData, Context};
@@ -100,7 +102,7 @@ malformed_request(OReqData, Context) ->
                 [] ->
                     {true, ReqData, Context};
                 Json ->
-                    lager:info("request ~p~n~n", [Json]),
+%                    lager:info("request ~p~n~n", [Json]),
                     {false, ReqData, [{json, Json}| NewCtx]}
             end;
         {true, #user_data{}} ->
@@ -113,35 +115,37 @@ malformed_request(OReqData, Context) ->
     end.
 
 validate_req('POST', ["users"|_], Data, UD) ->
-    case catch lists:map(fun(V) ->
-                                 users:from_proplist(V, UD) end,
+    case catch lists:map(fun({?USER, L} = V) ->
+                                 { proplists:lookup_all(?ECHO_UUID, L),
+                                   users:from_proplist(V, UD)} end,
                                 Data) of
-        [#user{}|_] ->
-            Data;
-        E ->
-            lager:error("Failed to unpack data ~p", [E]),
-            []
-    end;
+               [{_,#user{}}|_] = Users ->
+                 Users;
+               E ->
+                 lager:error("Failed to unpack data ~p", [E]),
+                 []
+         end;
 validate_req('PUT', ["users"], Data, UD) ->
     case UD#user_data.user of
         U = #user{} ->
             case catch users:update_parts(Data, U, UD) of
-                #user{} ->
-                    Data;
+                #user{} = User ->
+                    User;
                 E ->
                     lager:error("failed to change ~p", [E]),
                     []
             end;
         _ ->
-            lager:error("failed to change"),
+            lager:error("failed to change",[]),
             []
     end;
 validate_req('POST', ["transactions"], Data, UD) ->
-    case catch lists:map(fun(T) ->
-                                 transaction:from_proplist(T, UD) end,
+    case catch lists:map(fun({?TRANSACTION, L} =  T) ->
+                                 { proplists:lookup_all(?ECHO_UUID, L),
+                                   transaction:from_proplist(T, UD)} end,
                          Data) of
-        [#transaction{}|_] ->
-            Data;
+        [{_,#transaction{}}|_] = Transactions ->
+            Transactions;
         E ->
             lager:error("failed to change ~p", [E]),
             []
@@ -183,7 +187,7 @@ process_post(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     [{json, Decoded}]  = proplists:lookup_all(json, Context),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
-    error_logger:info_msg("~p ~p ~p ~p", [Method, Url, Any, UD]),
+    lager:info("~p ~p ~p ~p", [Method, Url, Any, UD]),
     Reply = try
                 {ok, Result} = mgsv_server:send_message({Method, UD,
                                                          Url, Decoded}),
@@ -195,7 +199,7 @@ process_post(ReqData, Context) ->
             end,
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
-    error_logger:info_msg("REPLY ~s",[HBody]),
+    lager:info("REPLY ~s",[HBody]),
     {true, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(HBody, ReqData)), Context}.
 
 delete_resource(ReqData, Context) ->
@@ -214,7 +218,7 @@ delete_resource(ReqData, Context) ->
     end.
 
 delete_completed(ReqData, Context) ->
-    lager:info("Delete completed"),
+    lager:info("Delete completed", []),
     {true, ReqData, Context}.
 
 from_json(ReqData, Context) ->
@@ -223,7 +227,7 @@ from_json(ReqData, Context) ->
     [{json, Decoded}] = proplists:lookup_all(json, Context),
     [{userdata, Ud}] = proplists:lookup_all(userdata, Context),
     SReply = try
-                error_logger:info_msg("~p ~p ~p", [Method, Url, Decoded]), %
+                lager:info("~p ~p ~p", [Method, Url, Decoded]), %
                 mgsv_server:send_message({Method, Ud,
                                           Url, Decoded})
             catch
@@ -233,18 +237,18 @@ from_json(ReqData, Context) ->
             end,
     case SReply of
         {ok, Reply} ->
-            error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
+            lager:info("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
             HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
             {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context};
         {nok, Error} ->
-            error_logger:info_msg("REPLY 400 error ~p",[Error]),
+            lager:info("REPLY 400 error ~p",[Error]),
             {{halt, 400}, ReqData, Context}
     end.
 
 to_html(ReqData, Context) ->
     Method = ReqData#wm_reqdata.method,
     Any = wrq:path_tokens(ReqData),
-    error_logger:info_msg("~p ~p",[Method, Any]),
+    lager:info("~p ~p",[Method, Any]),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
     {ok, Body} = try mgsv_server:send_message({Method, UD,
                                                Any})
@@ -255,10 +259,13 @@ to_html(ReqData, Context) ->
                  end,
     case wrq:path_tokens(ReqData) of
         ["countries"] ->
-            error_logger:info_msg("REPLY {\"NZD\":\"New Zealand Dollar....");
+            lager:info("REPLY {\"NZD\":\"New Zealand Dollar....");
         ["rates"] ->
-            error_logger:info_msg("REPLY {\"UGX\ ...");
-        _ -> error_logger:info_msg("REPLY ~s",[erlang:iolist_to_binary(Body)])
+            lager:info("REPLY {\"UGX\ ...");
+        ["crates"] ->
+            lager:info("REPLY [{\"exchange_rate\":{\"country_code\":\"SYP\",\"country_name\":\"Syrian Pound\",\"rate\":208.7461}}, ...");
+        _ ->
+            lager:info("REPLY [~s, ...]",[erlang:iolist_to_binary(Body)])
     end,
 
     HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
@@ -268,18 +275,21 @@ is_authorized(ReqData, Context) ->
     UserAgent = string:tokens(wrq:get_req_header("user-agent", ReqData), "/ "),
     ExpectedProtocol = wrq:get_req_header("protocolversion", ReqData),
     %%PayApp/1.4 CFNetwork/709.1 Darwin/13.3.0"
+    %% ["PayApp","1.61","(iPhone;","iOS","8.2;","Scale","2.00)"]
     {_,{Os,Version}} = lists:foldl(fun("PayApp",{false,Vars}) ->
                                            {true,Vars};
                                       (V,{true,{O,_}}) ->
                                            {false,{O,V}};
                                       ("Darwin", {B,{_,V}})->
                                            {B,{ios,V}};
+                                      ("(iPhone;", {B,{_,V}}) ->
+                                           {B, {ios, V}};
                                       (_, {false,Vars}) ->
                                            {false,Vars}
                                    end,
                                    {false,{android,"0.0"}}, UserAgent), %% Find out ios version etc for now
-    lager:info("Got user-agent OS ~p Version ~p Protocol ~p~n~p~n",
-               [Os,Version,ExpectedProtocol, UserAgent]),
+%    lager:info("Got user-agent OS ~p Version ~p Protocol ~p~n~p~n",
+%               [Os,Version,ExpectedProtocol, UserAgent]),
     UD = case user_from_auth(wrq:get_req_header("authorization", ReqData)) of
              {UserType, UserId, Token} ->
                  BinUId = list_to_binary(UserId),
@@ -319,7 +329,9 @@ is_authorized(ReqData, Context) ->
                                              ECtx]};
                 Res ->
                     lager:alert("Access denied authorization field, userdata ~p res ~p", [UD#user_data{id = hidden}, Res]),
-                    {"Basic realm=webmachine", ReqData, Context}
+                    {false, ReqData, [{userdata, no_data_found}|
+                                      ECtx]}
+%                    {"Basic realm=webmachine", ReqData, Context}
             end
     end.
 
