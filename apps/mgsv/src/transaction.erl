@@ -311,7 +311,7 @@ check_for_missing_fields(#transaction{amount = undefined}) ->
     {error, missing_amount};
 %% debt to self not allowed:
 check_for_missing_fields(#transaction{paid_by_username = P, paid_for_username = P}) ->
-    {error, missing_amount};
+    {error, debt_to_self_not_allowed};
 check_for_missing_fields(Transaction = #transaction{timestamp = undefined,
                                                    server_timestamp = S}) ->
     check_for_missing_fields(Transaction#transaction{timestamp = S});
