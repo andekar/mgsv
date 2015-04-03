@@ -46,18 +46,18 @@ handle_call({'PUT', Ud, Path, Props}, _From, State) ->
     case Path of
         ["users"] -> %% currently we only support change username
             pay_server:change_userinfo(Userdata, Props),
-            {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+            {reply, {ok, [[?STATUS(<<"ok">>)]]}, State};
         ["debts"] -> %% transfer debts
             [{_,OldUid}] = proplists:lookup_all(?OLD_UID, Props),
             [{_,NewUid}] = proplists:lookup_all(?NEW_UID, Props),
             lager:info("transfer_debts OldUid: ~p to NewUid: ~p requested by: ~p~n", [OldUid, NewUid, Userdata]),
             case pay_server:transfer_debts(OldUid, NewUid, Userdata) of
                 ok ->
-                    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State};
+                    {reply, {ok, [[?STATUS(<<"ok">>)]]}, State};
                 {nok, Error} ->
                     {reply, {nok, Error}, State}
             end;
-        _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
+        _ -> {reply, {ok, [[?STATUS(<<"ok">>)]]}, State}
     end;
 
 %%creations
@@ -70,23 +70,23 @@ handle_call({'POST', Ud, Path, Props}, _From, State) ->
                                       Res = pay_server:register_user(EchoAndUser, Userdata),
                                       ?JSONSTRUCT([{?USER,Res}])
                               end, Props),
-            {reply, {ok, mochijson2:encode(UUser)}, State};
+            {reply, {ok, UUser}, State};
         ["transactions"] ->
             Reply = lists:map(fun(EchoAndTransaction) ->
                                       lager:debug("Add transaction: ~p", [EchoAndTransaction]),
                                       Tmp = pay_server:add_debt({add,Userdata, EchoAndTransaction}),
                                       ?JSONSTRUCT([{?TRANSACTION,Tmp}])
                               end, Props),
-            {reply, {ok, mochijson2:encode(Reply)}, State};
+            {reply, {ok, Reply}, State};
         ["android_token"] ->
             [{_,AndroidToken}] = proplists:lookup_all(?ANDROID_TOKEN, Props),
             pay_push_notification:add_user_android(Userdata#user_data.username, AndroidToken),
-            {reply, {ok, mochijson2:encode([{?ANDROID_TOKEN, AndroidToken}])}, State};
+            {reply, {ok, [{?ANDROID_TOKEN, AndroidToken}]}, State};
         ["ios_token"] ->
             [{_,IosToken}] = proplists:lookup_all(?IOS_TOKEN, Props),
             pay_push_notification:add_user_ios(Userdata#user_data.username, IosToken),
-            {reply, {ok, mochijson2:encode([{?IOS_TOKEN, IosToken}])}, State};
-        _ -> {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}
+            {reply, {ok, [{?IOS_TOKEN, IosToken}]}, State};
+        _ -> {reply, {ok, [[?STATUS(<<"ok">>)]]}, State}
     end;
 
 %return res
@@ -101,12 +101,12 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                                                                      [{<<"country_code">>, Short},
                                                                       {<<"country_name">>, Long}]}])
                                             end, Countries),
-                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                    {reply, {ok, Structified}, State};
                 _ ->
-                    {reply, {ok, mochijson2:encode(Countries)}, State}
+                    {reply, {ok, Countries}, State}
             end;
         ["country", CountryCode] ->
-            {reply, {ok, mochijson2:encode([exchangerates_server:country(list_to_binary(CountryCode))])}, State};
+            {reply, {ok, [exchangerates_server:country(list_to_binary(CountryCode))]}, State};
         ["rates"] ->
             Rates = exchangerates_server:rates(),
             case Ud#user_data.protocol of
@@ -116,9 +116,9 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                                                                      [{<<"country_code">>, Short},
                                                                       {<<"rate">>, Rate}]}])
                                             end, Rates),
-                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                    {reply, {ok, Structified}, State};
                 _ ->
-                    {reply, {ok, mochijson2:encode(Rates)}, State}
+                    {reply, {ok, Rates}, State}
             end;
         ["crates"] ->
             Rates = exchangerates_server:crates(), %{code, name, rate}
@@ -130,13 +130,13 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                                                                       {<<"country_name">>, Long},
                                                                       {<<"rate">>, Rate}]}])
                                             end, Rates),
-                    {reply, {ok, mochijson2:encode(Structified)}, State};
+                    {reply, {ok, Structified}, State};
                 _ ->
-                    {reply, {ok, mochijson2:encode(Rates)}, State}
+                    {reply, {ok, Rates}, State}
             end;
 
         ["rate", CountryCode] ->
-            {reply, {ok, mochijson2:encode([exchangerates_server:rate(list_to_binary(CountryCode))])}, State};
+            {reply, {ok, [exchangerates_server:rate(list_to_binary(CountryCode))]}, State};
         ["users"|Uids] ->
             RealUids = lists:map(fun(Val) -> {?UID, ?UID_TO_LOWER(list_to_binary(Val))} end, Uids),
             Struct = pay_server:get_usernames(RealUids, Ud),
@@ -148,7 +148,7 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                                     end
                             end,
                             Struct),
-            {reply, {ok, mochijson2:encode(Ret)}, State};
+            {reply, {ok, Ret}, State};
         _ ->
             Userdata = users:update_find(Ud),
             case Path of
@@ -198,21 +198,19 @@ handle_call({'GET', Ud, Path}, _From, State) ->
                     Return = lists:map(fun(List) ->
                                                ?JSONSTRUCT([?TRANSACTION(List)]) end,
                                       my_sublist(Sorted, F, T)),
-                    Return2 = mochijson2:encode(Return),
-                    {reply, {ok, Return2}, State};
+                    {reply, {ok, Return}, State};
                 ["debts"] ->
                     Return = lists:map(fun(List) ->
                                                ?JSONSTRUCT([?DEBT(List)]) end,
                                        pay_server:get_user_debt(Userdata)),
-                    Return2 = mochijson2:encode(Return),
-                    {reply, {ok, Return2}, State};
+                    {reply, {ok, Return}, State};
                 _ -> {reply, {ok, <<"ok">>}, State}
             end
     end;
 
 handle_call(Request, _From, State) ->
     lager:alert("Handle unknown call ~p", [Request]),
-    {reply, {ok, mochijson2:encode([[?STATUS(<<"ok">>)]])}, State}.
+    {reply, {ok, [[?STATUS(<<"ok">>)]]}, State}.
 
 handle_cast(Request, State) ->
     lager:alert("Handle unknown cast ~p", [Request]),

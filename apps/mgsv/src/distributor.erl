@@ -89,9 +89,9 @@ malformed_request(OReqData, Context) ->
     {Authorized, ReqData, NewCtx} = is_authorized(OReqData, Context),
 
     [{userdata, UD}] = proplists:lookup_all(userdata, NewCtx),
-    lager:info("logged in as ~p", [UD]),
     Path = wrq:path_tokens(ReqData),
-    lager:info("Request at path ~p", [Path]),
+    Method = ReqData#wm_reqdata.method,
+    lager:info("~p ~p as ~p", [Method, Path, UD]),
     Method = ReqData#wm_reqdata.method,
     case {Authorized, UD} of
         {true, #user_data{ protocol = undefined}} ->
@@ -197,16 +197,21 @@ process_post(ReqData, Context) ->
                     lager:alert("CRASH ~p~n~p~n", [Error, erlang:get_stacktrace()]),
                     mochijson2:encode([[{error,request_failed}]])
             end,
-
-    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
-    lager:info("REPLY ~s",[HBody]),
+    Json = mochijson2:encode(Reply),
+    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Json)]),
+    case Reply of
+        [First|_] ->
+            Json2 = mochijson2:encode(First),
+            lager:info("REPLY [~s, ...]", [erlang:iolist_to_binary(Json2)]);
+        _ ->
+            lager:info("REPLY [~s, ...]",[HBody])
+    end,
     {true, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(HBody, ReqData)), Context}.
 
 delete_resource(ReqData, Context) ->
     Url = wrq:path_tokens(ReqData),
     Method = ReqData#wm_reqdata.method,
 
-    lager:info("~p ~p", [Method, Url]),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
     case catch mgsv_server:send_message({Method, UD,
                                          Url}) of
@@ -218,7 +223,6 @@ delete_resource(ReqData, Context) ->
     end.
 
 delete_completed(ReqData, Context) ->
-    lager:info("Delete completed", []),
     {true, ReqData, Context}.
 
 from_json(ReqData, Context) ->
@@ -237,9 +241,16 @@ from_json(ReqData, Context) ->
             end,
     case SReply of
         {ok, Reply} ->
-            lager:info("REPLY ~s",[erlang:iolist_to_binary(Reply)]),
-            HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Reply)]),
-            {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Reply, ReqData)), Context};
+            Json = mochijson2:encode(Reply),
+            case Reply of
+                [First|_] ->
+                    Json2 = mochijson2:encode(First),
+                    lager:info("REPLY [~s, ...]", [erlang:iolist_to_binary(Json2)]);
+                _ ->
+                    lager:info("REPLY [~s, ...]",[Json])
+            end,
+            HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Json)]),
+            {HBody, wrq:set_resp_header("Content-type", "application/json", wrq:append_to_response_body(Json, ReqData)), Context};
         {nok, Error} ->
             lager:info("REPLY 400 error ~p",[Error]),
             {{halt, 400}, ReqData, Context}
@@ -248,7 +259,6 @@ from_json(ReqData, Context) ->
 to_html(ReqData, Context) ->
     Method = ReqData#wm_reqdata.method,
     Any = wrq:path_tokens(ReqData),
-    lager:info("~p ~p",[Method, Any]),
     [{userdata, UD}] = proplists:lookup_all(userdata, Context),
     {ok, Body} = try mgsv_server:send_message({Method, UD,
                                                Any})
@@ -257,18 +267,16 @@ to_html(ReqData, Context) ->
                          lager:alert("CRASH ~p~n~p", [Err, erlang:get_stacktrace()]),
                          {ok, mochijson2:encode([[{error,request_failed}]])}
                  end,
-    case wrq:path_tokens(ReqData) of
-        ["countries"] ->
-            lager:info("REPLY {\"NZD\":\"New Zealand Dollar....");
-        ["rates"] ->
-            lager:info("REPLY {\"UGX\ ...");
-        ["crates"] ->
-            lager:info("REPLY [{\"exchange_rate\":{\"country_code\":\"SYP\",\"country_name\":\"Syrian Pound\",\"rate\":208.7461}}, ...");
+    Json = erlang:iolist_to_binary(mochijson2:encode(Body)),
+    case Body of
+        [First|_] ->
+            Json2 = mochijson2:encode(First),
+            lager:info("REPLY [~s, ...]", [erlang:iolist_to_binary(Json2)]);
         _ ->
-            lager:info("REPLY [~s, ...]",[erlang:iolist_to_binary(Body)])
+            lager:info("REPLY [~s, ...]",[Json])
     end,
 
-    HBody = io_lib:format("~s~n", [erlang:iolist_to_binary(Body)]),
+    HBody = io_lib:format("~s~n", [Json]),
     {HBody, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->

@@ -205,8 +205,8 @@ handle_call({delete_debt, Userdata, Uuid}, _From, State) ->
             debt:delete(T, ReqByU),
             lager:info("DELETE DEBT uuid: ~p  Requested by: ~p ~n", [Uuid, ReqByIU]);
         %% below shows something corrupt action should be taken
-        [{_Uuid, _Items} | _More] = List -> lager:info("ERROR delete_debt ~p", [List]);
-        _ -> ok
+        List ->
+            lager:info("ERROR delete_debt ~p", [List])
     end,
     {reply, ok, State};
 
@@ -300,8 +300,6 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
     TOldUser = ?UID_TO_LOWER(TTOldUser),
     TNewUser = ?UID_TO_LOWER(TTNewUser),
 
-    TNewUser = verify_uid(TNewUser, []),
-
     no_such_user = users:get(TNewUser),
     User = #user{} = users:get(TOldUser),
     OUserid = User#user.internal_uid,
@@ -318,7 +316,8 @@ handle_cast({change_username, TTOldUser, TTNewUser}, State) ->
                                   transaction:add(T#transaction{paid_by_username = TNewUser}, UUser);
                               _ ->
                                   transaction:add(T#transaction{paid_for_username = TNewUser}, UUser)
-                          end end, transaction:get(TOldUser)),
+                          end
+                  end, transaction:get(User)),
 
     lists:foreach(fun(D) ->
                           case D#debt.uid1 of
@@ -419,17 +418,6 @@ currency_and_amount(Key, Props, DebtDb) ->
 
 uuid_to_binary(Uuid) ->
      list_to_binary(uuid:to_string(Uuid)).
-
-binary_uuid() ->
-    ossp_uuid:make(v4, text).
-
-% we might need to create a valid uid here,
-% or if the uid already exist then we are fine
-% or if the uid contains @
-verify_uid(undefined, _Db) ->
-    binary_uuid();
-verify_uid(User, _Db) ->
-    User.
 
 user_exist(Uid, _State) ->
     UidLower  = ?UID_TO_LOWER(Uid),

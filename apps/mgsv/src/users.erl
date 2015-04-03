@@ -82,7 +82,7 @@ add(User, ReqBy = #user{}) ->
     end.
 
 %%Todo what if not registered?!?
--spec update_find(#user_data{}) -> #user{} | no_such_user.
+%-spec update_find(#user_data{}) -> #user{} | no_such_user.
 update_find(Userdata = #user_data{}) ->
     Id = Userdata#user_data.id,
     Username = Userdata#user_data.username,
