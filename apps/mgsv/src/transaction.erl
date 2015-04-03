@@ -28,34 +28,28 @@ add(_, no_such_user) ->
     lager:info("no such user~n",[]),
     nok.
 
-%% TODO fix [] -> {}
--type userid() :: #user{} | {username,binary()} | {transaction_id, binary()} |{paid_id, binary()}.
--spec get(userid() | [userid()]) ->
-                 [#transaction{}].
+-type userid() :: #user{} | {transaction_id, binary()}.
+-spec get(userid() | {userid(), userid()}) -> [#transaction{}].
 get(User = #user{}) ->
-    transaction:get({paid_id,User#user.internal_uid});
+    get_by_paid_id(User#user.internal_uid);
 get({User = #user{}, User2 = #user{}}) ->
-    transaction:get([{paid_id, User#user.internal_uid},
-                     {paid_id, User2#user.internal_uid}]);
-get({username, Username}) ->
-    {atomic,Res} = mnesia:transaction(fun() ->
-                              mnesia:index_read(transaction, Username, #transaction.paid_by_username) ++
-                                  mnesia:index_read(transaction, Username, #transaction.paid_for_username) end),
-    Res;
+    Ts1 = get_by_paid_id(User#user.internal_uid),
+    Ts2 = get_by_paid_id(User2#user.internal_uid),
+    Ts3 = Ts1 -- Ts2,
+    Ts1 -- Ts3;
 get({transaction_id, Id}) ->
     {atomic,Res} = mnesia:transaction(fun() ->
                               mnesia:read(transaction, Id) end),
-    Res;
-get({paid_id, Id}) ->
-    {atomic,Res} = mnesia:transaction(fun() ->
-                                              mnesia:index_read(transaction, Id, #transaction.paid_by) ++
-                                                  mnesia:index_read(transaction, Id, #transaction.paid_for) end),
-    Res;
-get([T1,T2]) ->
-    Ts1 = transaction:get(T1),
-    Ts2 = transaction:get(T2),
-    Ts3 = Ts1 -- Ts2,
-    Ts1 -- Ts3.
+    Res.
+
+-spec get_by_paid_id(binary()) -> [#transaction{}].
+get_by_paid_id(Id) ->
+    {atomic,Res} =
+        mnesia:transaction(
+          fun() ->
+                  mnesia:index_read(transaction, Id, #transaction.paid_by) ++
+                      mnesia:index_read(transaction, Id, #transaction.paid_for) end),
+    Res.
 
 -spec change_internal_uid(#user{}, #user{}) -> ok.
 change_internal_uid(OldUser = #user{}, NewUser = #user{}) ->

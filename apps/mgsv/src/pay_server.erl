@@ -356,7 +356,7 @@ handle_cast({remove_user_debt, TUuid, Userdata}, State) ->
                  ok;
              _ -> nok
          end,
-    Transactions = transaction:get([OUser, ReqUser]),
+    Transactions = transaction:get({OUser, ReqUser}),
 
     lists:foreach(fun(T) ->
                           transaction:delete(T) end,
