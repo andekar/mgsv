@@ -269,8 +269,11 @@ to_html(ReqData, Context) ->
                  end,
     Json = erlang:iolist_to_binary(mochijson2:encode(Body)),
     case Body of
-        [First|_] ->
+        [First|_] when is_list(First)->
             Json2 = mochijson2:encode(First),
+            lager:info("REPLY [~s, ...]", [erlang:iolist_to_binary(Json2)]);
+        [First|_] ->
+            Json2 = mochijson2:encode([First]),
             lager:info("REPLY [~s, ...]", [erlang:iolist_to_binary(Json2)]);
         _ ->
             lager:info("REPLY [~s, ...]",[Json])
