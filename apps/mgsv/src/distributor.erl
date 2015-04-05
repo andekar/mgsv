@@ -117,8 +117,12 @@ malformed_request(OReqData, Context) ->
 validate_req('POST', ["users"|_], Data, UD) ->
     case catch lists:map(fun({?USER, L} = V) ->
                                  { proplists:lookup_all(?ECHO_UUID, L),
-                                   users:from_proplist(V, UD)} end,
-                                Data) of
+                                   users:from_proplist(V, UD)};
+                            (L) ->
+                                 { proplists:lookup_all(?ECHO_UUID, L),
+                                   users:from_proplist({?USER, L}, UD)}
+                         end,
+                         Data) of
                [{_,#user{}}|_] = Users ->
                  Users;
                E ->
