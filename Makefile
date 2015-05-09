@@ -20,11 +20,9 @@ release:
 	cd rel
 	@./rebar -v generate
 
-rel:
-	@./rebar clean
+rels:
 	@./rebar compile
-	cd rel
-	@./rebar -v generate
+	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/ 
 
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'

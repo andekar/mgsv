@@ -376,7 +376,7 @@ terminate(Reason, _State) ->
     lager:emergency("TERMINATING ~p~n~p", [Reason, erlang:get_stacktrace()]),
     ok.
 
-code_change(OldVsn, State, "0.3.7" = NewVsn) ->
+code_change(OldVsn, State, "0.3.8" = NewVsn) ->
     lager:info("UPGRADING VERSION ~n~p~n~p~n~p~n",[OldVsn, State, NewVsn]),
 
     application:set_env(webmachine, server_name, "PayApp/" ++ NewVsn),
