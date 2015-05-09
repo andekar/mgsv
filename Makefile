@@ -23,6 +23,10 @@ rels:
 
 rel: clean release
 
+rels:
+	@./rebar compile
+	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/
+
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'
 
