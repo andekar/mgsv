@@ -3,29 +3,28 @@ APP := mgsv
 
 .PHONY: deps
 
-all: deps
-	@./rebar compile
-
-deps:
-	@./rebar get-deps
+all:
+	@./rebar3 compile
 
 clean:
-	@./rebar clean
+	@./rebar3 clean
 
 distclean: clean
-	@./rebar delete-deps
+	@./rebar3 delete-deps
 
 release:
-	@./rebar compile
+	@./rebar3 compile
 	cd rel
-	@./rebar -v generate
+	@./rebar3 -v generate
 
 rels:
 	@./rebar compile
-	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/ 
+	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/
+
+rel: clean release
 
 docs:
 	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'
 
 small:
-	@./rebar compile skip_deps=true
+	@./rebar3 compile skip_deps=true

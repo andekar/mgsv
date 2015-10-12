@@ -28,7 +28,7 @@ mod_edit_details(Edits = #edit_details{}, ReqBy = #user{}) ->
      }.
 
 get_timestamp() ->
-    {Mega, Seconds, Milli} = erlang:now(),
+    {Mega, Seconds, Milli} = erlang:timestamp(),
     Mega * 1000000000000 + Seconds * 1000000 + Milli.
 
 binary_uuid() ->
