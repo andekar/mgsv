@@ -1,22 +1,25 @@
 {application, mgsv,
- [
-  {description, ""},
-  {vsn, "0.3.8"},
+ [{description, ""},
+  {vsn, "0.3.9"},
   {registered, []},
-  {applications, [
-                  crypto,
-                  kernel,
-                  stdlib,
-                  mochiweb,
-                  apns,
-                  webmachine,
-                  ossp_uuid,
-                  ssl,
-                  asn1,
-                  exchangerates,
-                  jiffy,
-                  gcm
-                 ]},
   {mod, { mgsv_app, []}},
-  {env, []}
+  {applications,
+   [crypto,
+    kernel,
+    stdlib,
+    mochiweb,
+    apns,
+    webmachine,
+    ossp_uuid,
+    ssl,
+    asn1,
+    exchangerates,
+    jiffy,
+    gcm
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {links, []}
  ]}.
