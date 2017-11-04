@@ -1,4 +1,3 @@
-#ignore .beam
 *.beam
 rel/mgsv*/*
 deps
@@ -13,3 +12,20 @@ rebar
 *.key
 *.der
 rel/files/sys.config
+.rebar3
+_*
+.eunit
+*.o
+*.plt
+*.swp
+*.swo
+.erlang.cookie
+ebin
+log
+erl_crash.dump
+.rebar
+logs
+_build
+.idea
+*.iml
+rebar3.crashdump
