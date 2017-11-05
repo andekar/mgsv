@@ -32,4 +32,4 @@ get_timestamp() ->
     Mega * 1000000000000 + Seconds * 1000000 + Milli.
 
 binary_uuid() ->
-    ossp_uuid:make(v4, text).
+    list_to_binary(uuid:uuid_to_string(uuid:get_v4())).

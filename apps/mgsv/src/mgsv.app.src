@@ -7,15 +7,16 @@
    [crypto,
     kernel,
     stdlib,
+    lager,
     mochiweb,
     apns,
     webmachine,
-    ossp_uuid,
     ssl,
     asn1,
     exchangerates,
     jiffy,
     gcm
+   , uuid
    ]},
   {env,[]},
   {modules, []},
