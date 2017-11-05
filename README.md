@@ -1,9 +1,9 @@
 mgsv
 ====
-#INSTALLATION
+**INSTALLATION**
 make all
 
-#STARTING
+**STARTING**
 _build/default/rel/mgsv/bin/mgsv console
 
 now you can do
