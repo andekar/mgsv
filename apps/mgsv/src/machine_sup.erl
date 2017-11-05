@@ -30,7 +30,7 @@ start_link() ->
 init([]) ->
     Ip = case os:getenv("WEBMACHINE_IP") of false -> "0.0.0.0"; Any -> Any end,
     {ok, Dispatch} = file:consult(filename:join(
-                         ["..","..", "priv", "dispatch.conf"])),
+                         ["priv", "dispatch.conf"])),
     WebConfigSSL = [{name, one},
                  {ip, Ip},
                  {port, 8443},
