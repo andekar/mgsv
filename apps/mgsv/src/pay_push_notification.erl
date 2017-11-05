@@ -30,7 +30,7 @@ start_link() ->
                 lager:info("failed to aquire env mgsv id ~p",[Other])
         end,
     lager:info("Starting pay_push_notification"),
-    apns:connect(payapp, fun(Ab,Ba) ->lager:error("Error ~p ~p", [Ab,Ba]) end, fun(Arg) -> error_logger:info_msg("error ~p~n~n",[Arg]), remove_ios_token(Arg) end),
+    apns:connect(payapp),
     gcm:start(android,AndroidId),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
