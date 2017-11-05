@@ -11,7 +11,8 @@ rebar
 *.org
 *.key
 *.der
-rel/files/sys.config
+config
+*.config
 .rebar3
 _*
 .eunit
