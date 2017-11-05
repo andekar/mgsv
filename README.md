@@ -1,5 +1,13 @@
 mgsv
 ====
+#INSTALLATION
+make all
+
+#STARTING
+_build/default/rel/mgsv/bin/mgsv console
+
+now you can do
+curl -v -k https://localhost:8443/payapp/
 
 #Protocol = 0.36
 #HTTPS

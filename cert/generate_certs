@@ -1,0 +1,6 @@
+#generate ssl server certs
+openssl genrsa -out server_key.pem 1024
+openssl req -new -key server_key.pem -out request.pem -config openssl.cnf
+openssl x509 -req -days 30 -in request.pem -signkey server_key.pem -out server_cert.pem
+rm request.pem
+mv server_key.pem server_cert.pem ../priv/

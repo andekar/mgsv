@@ -4,6 +4,7 @@ APP := mgsv
 .PHONY: deps
 
 all:
+	@cd cert; ./generate_certs
 	@./rebar3 compile
 
 clean:
@@ -13,22 +14,4 @@ distclean: clean
 	@./rebar3 delete-deps
 
 release:
-	@./rebar3 compile
-	cd rel
-	@./rebar3 -v generate
-
-rels:
-	@./rebar compile
-	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/
-
-rel: clean release
-
-rels:
-	@./rebar compile
-	cd rel; .././rebar -v generate; .././rebar generate-upgrade previous_release=$(PREV); mv *.tar.gz mgsv_running/releases/
-
-docs:
-	@erl -noshell -run edoc_run application '$(APP)' '"."' '[]'
-
-small:
-	@./rebar3 compile skip_deps=true
+	@./rebar3 release
