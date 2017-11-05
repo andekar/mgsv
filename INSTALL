@@ -1,10 +1,10 @@
-First install rebar
+**INSTALLATION**
 
-then
-make deps
-followed by
-make
+make all
 
-start by
-cd rel
-rebar -v generate
+**STARTING**
+
+_build/default/rel/mgsv/bin/mgsv console
+
+now you can do
+curl -v -k https://localhost:8443/payapp/
