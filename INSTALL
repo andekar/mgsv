@@ -6,5 +6,8 @@ make all
 
 _build/default/rel/mgsv/bin/mgsv console
 
+In the console write:
+clean_start:setup_db().
+
 now you can do
 curl -v -k https://localhost:8443/payapp/
